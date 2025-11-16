@@ -27,15 +27,15 @@ class SettingsController extends BaseController {
                 return;
             }
             
-            // Get all settings from database
-            $sql = "SELECT * FROM settings ORDER BY setting_key ASC";
+            // Get all settings from database (use correct column names)
+            $sql = "SELECT `key`, `value` FROM settings ORDER BY `key` ASC";
             $stmt = $this->pdo->query($sql);
             $settings = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
             // Convert to key-value array
             $data = [];
             foreach ($settings as $setting) {
-                $data[$setting['setting_key']] = $setting['setting_value'];
+                $data[$setting['key']] = $setting['value'];
             }
             
             // If no settings found, return defaults
@@ -61,6 +61,28 @@ class SettingsController extends BaseController {
             return $result->rowCount() > 0;
         } catch (Exception $e) {
             return false;
+        }
+    }
+
+    /**
+     * Ensure settings table exists with the correct schema
+     */
+    private function ensureSettingsTable() {
+        try {
+            $sql = "CREATE TABLE IF NOT EXISTS `settings` (
+                `id` int(11) NOT NULL AUTO_INCREMENT,
+                `key` varchar(100) NOT NULL UNIQUE,
+                `value` text DEFAULT NULL,
+                `type` enum('string','number','boolean','json') NOT NULL DEFAULT 'string',
+                `description` text DEFAULT NULL,
+                `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+                PRIMARY KEY (`id`),
+                KEY `idx_key` (`key`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
+            $this->pdo->exec($sql);
+        } catch (Exception $e) {
+            // Ignore if creation fails; caller will handle
+            error_log('ensureSettingsTable error: ' . $e->getMessage());
         }
     }
     
@@ -128,13 +150,13 @@ class SettingsController extends BaseController {
                 return;
             }
             
-            $sql = "SELECT setting_value FROM settings WHERE setting_key = ?";
+            $sql = "SELECT `value` FROM settings WHERE `key` = ?";
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute([$key]);
             $result = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if ($result) {
-                $this->sendSuccess(['value' => $result['setting_value']]);
+                $this->sendSuccess(['value' => $result['value']]);
             } else {
                 // Return default value if not found
                 $this->sendSuccess(['value' => $this->getDefaultValue($key)]);
@@ -172,9 +194,12 @@ class SettingsController extends BaseController {
                 return;
             }
             
-            // Check if settings table exists
+            // Check if settings table exists; attempt to auto-create if missing
             if (!$this->tableExists('settings')) {
-                error_log('Settings table does not exist. Please run: database_settings_table.sql');
+                $this->ensureSettingsTable();
+            }
+            if (!$this->tableExists('settings')) {
+                error_log('Settings table does not exist after creation attempt');
                 $this->sendError('Settings table not found. Please contact administrator to run database migration.', 500);
                 return;
             }
@@ -183,19 +208,19 @@ class SettingsController extends BaseController {
             
             foreach ($data as $key => $value) {
                 // Check if setting exists
-                $sql = "SELECT id FROM settings WHERE setting_key = ?";
+                $sql = "SELECT id FROM settings WHERE `key` = ?";
                 $stmt = $this->pdo->prepare($sql);
                 $stmt->execute([$key]);
                 $exists = $stmt->fetch();
                 
                 if ($exists) {
                     // Update existing
-                    $sql = "UPDATE settings SET setting_value = ?, updated_at = NOW() WHERE setting_key = ?";
+                    $sql = "UPDATE settings SET `value` = ?, updated_at = NOW() WHERE `key` = ?";
                     $stmt = $this->pdo->prepare($sql);
                     $stmt->execute([$value, $key]);
                 } else {
                     // Insert new
-                    $sql = "INSERT INTO settings (setting_key, setting_value, created_at, updated_at) VALUES (?, ?, NOW(), NOW())";
+                    $sql = "INSERT INTO settings (`key`, `value`, `type`, `description`, `updated_at`) VALUES (?, ?, 'string', NULL, NOW())";
                     $stmt = $this->pdo->prepare($sql);
                     $stmt->execute([$key, $value]);
                 }
@@ -282,11 +307,11 @@ class SettingsController extends BaseController {
 
             // Attempt to read from DB if table exists
             if ($this->tableExists('settings')) {
-                $sql = "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('enable_tax_shop','tax_rate_shop')";
+                $sql = "SELECT `key`, `value` FROM settings WHERE `key` IN ('enable_tax_shop','tax_rate_shop')";
                 $stmt = $this->pdo->query($sql);
                 $settings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 foreach ($settings as $s) {
-                    $data[$s['setting_key']] = $s['setting_value'];
+                    $data[$s['key']] = $s['value'];
                 }
             }
 

@@ -114,6 +114,7 @@ composer.lock
 # Build files
 /dist/
 /build/
+/dist_release/
 
 # Temporary files
 *.tmp

@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../models/Payment.php';
 require_once __DIR__ . '/../models/Order.php';
+require_once __DIR__ . '/../models/Product.php';
 require_once __DIR__ . '/../models/Notification.php';
 require_once __DIR__ . '/BaseController.php';
 
@@ -14,12 +15,14 @@ class PaymentController extends BaseController {
     private $paymentModel;
     private $orderModel;
     private $notificationModel;
+    private $productModel;
     
     public function __construct($pdo) {
         parent::__construct($pdo);
         $this->paymentModel = new Payment($pdo);
         $this->orderModel = new Order($pdo);
         $this->notificationModel = new Notification($pdo);
+        $this->productModel = new Product($pdo);
     }
     
     /**
@@ -84,7 +87,10 @@ class PaymentController extends BaseController {
             
             // Update order payment status
             $this->orderModel->updatePaymentStatus($order['id'], 'paid', $transactionId);
-            
+
+            // Reduce stock for order items if not already reduced
+            $this->reduceOrderStockIfNeeded($order['id'], $order['order_number']);
+
             // Send notification
             $this->notificationModel->notifyPaymentReceived(
                 $order['id'],
@@ -178,7 +184,10 @@ class PaymentController extends BaseController {
             // Update order if payment is successful
             if ($paymentStatus === 'success') {
                 $this->orderModel->updatePaymentStatus($order['id'], 'paid', $transactionId);
-                
+
+                // Reduce stock for order items if not already reduced
+                $this->reduceOrderStockIfNeeded($order['id'], $order['order_number']);
+
                 // Send notification
                 $this->notificationModel->notifyPaymentReceived(
                     $order['id'],
@@ -224,16 +233,32 @@ class PaymentController extends BaseController {
             $this->sendError('Payment not found', 404);
         }
         
-        $this->sendSuccess([
+        // Extract optional manual flags from callback_data
+        $flags = [];
+        if (!empty($payment['callback_data'])) {
+            try {
+                $cb = json_decode($payment['callback_data'], true);
+                if (is_array($cb)) {
+                    $flags['qr_scanned'] = (bool)($cb['qr_scanned']['value'] ?? $cb['qr_scanned'] ?? false);
+                    $flags['transfer_received'] = (bool)($cb['transfer_received']['value'] ?? $cb['transfer_received'] ?? false);
+                    $flags['transfer_status'] = $cb['transfer_status'] ?? null;
+                }
+            } catch (Exception $e) {
+                // ignore
+            }
+        }
+
+        $this->sendSuccess(array_merge([
             'order_number' => $order['order_number'],
             'payment_status' => $order['payment_status'],
+            'order_status' => $order['order_status'],
             'payment_method' => $payment['payment_method'],
             'amount' => $payment['amount'],
             'transaction_id' => $payment['transaction_id'],
             'paid_at' => $order['paid_at'],
             'qr_code' => $payment['qr_code'],
             'expired_at' => $payment['expired_at']
-        ]);
+        ], $flags));
     }
     
     /**
@@ -241,6 +266,7 @@ class PaymentController extends BaseController {
      */
     public function getStats() {
         $this->checkAuthentication();
+        $this->requireAdmin();
         
         $startDate = $_GET['start_date'] ?? null;
         $endDate = $_GET['end_date'] ?? null;
@@ -268,6 +294,49 @@ class PaymentController extends BaseController {
         
         return $statusMap[strtolower($gatewayStatus)] ?? 'pending';
     }
+
+    /**
+     * Reduce stock for order items exactly once per order
+     */
+    private function reduceOrderStockIfNeeded($orderId, $orderNumber) {
+        try {
+            // Check if stock movements already recorded for this order
+            $sql = "SELECT COUNT(*) as count FROM stock_movements WHERE reference_type = 'order' AND reference_id = ?";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$orderId]);
+            $exists = (int)($stmt->fetch()['count'] ?? 0);
+            if ($exists > 0) {
+                // Already reduced, skip
+                return;
+            }
+
+            // Fetch order items
+            $items = $this->orderModel->getItems($orderId);
+            if (!is_array($items) || empty($items)) {
+                return;
+            }
+
+            // Reduce stock for each item (movement_type 'out', quantity negative)
+            foreach ($items as $item) {
+                $productId = (int)$item['product_id'];
+                $quantity = (int)$item['quantity'];
+                if ($productId > 0 && $quantity > 0) {
+                    $this->productModel->updateStock(
+                        $productId,
+                        -$quantity,
+                        'out',
+                        'order',
+                        $orderId,
+                        null,
+                        'Order ' . $orderNumber
+                    );
+                }
+            }
+        } catch (Exception $e) {
+            // Log but do not fail payment flow
+            error_log('Failed reducing stock for order ' . $orderNumber . ': ' . $e->getMessage());
+        }
+    }
     
     /**
      * Validate webhook signature (implement based on payment gateway)
@@ -282,6 +351,102 @@ class PaymentController extends BaseController {
         
         // Implement based on your payment gateway requirements
         return true;
+    }
+
+    /**
+     * Manual update endpoint (PUBLIC)
+     * Allows setting intermediate flags or confirming payment received.
+     * Expected JSON body: { order_number, flag?, note?, confirm_paid? }
+     */
+    public function manualUpdate() {
+        if ($this->getMethod() !== 'POST') {
+            $this->sendError('Method not allowed', 405);
+        }
+
+        $data = $this->getRequestData();
+        $this->validateRequired($data, ['order_number']);
+
+        $order = $this->orderModel->findByOrderNumber($data['order_number']);
+        if (!$order) {
+            $this->sendError('Order not found', 404);
+        }
+
+        $payment = $this->paymentModel->findByOrderId($order['id']);
+        if (!$payment) {
+            $this->sendError('Payment not found', 404);
+        }
+
+        // Build callback_data with flags
+        $existingCb = [];
+        if (!empty($payment['callback_data'])) {
+            try { $existingCb = json_decode($payment['callback_data'], true) ?: []; } catch (Exception $e) { $existingCb = []; }
+        }
+
+        // Accept either `flag` or `requestVerification` from client
+        $flag = $data['flag'] ?? ($data['requestVerification'] ?? null); // e.g. 'qr_scanned', 'transfer_received'
+        $note = $data['note'] ?? null;
+        $now = date('Y-m-d H:i:s');
+
+        if ($flag) {
+            $allowed = ['qr_scanned', 'transfer_received'];
+            if (!in_array($flag, $allowed, true)) {
+                $this->sendError('Unsupported flag', 400);
+            }
+            $existingCb[$flag] = [ 'value' => true, 'timestamp' => $now ];
+            if ($flag === 'transfer_received') {
+                $existingCb['transfer_status'] = 'received';
+            }
+        }
+
+        if ($note) {
+            $existingCb['manual_note'] = $note;
+            $existingCb['manual_note_at'] = $now;
+        }
+
+        $confirmPaid = false;
+        $confirmParam = $data['confirm_paid'] ?? null;
+        if (is_string($confirmParam)) {
+            $confirmPaid = in_array(strtolower($confirmParam), ['1','true','yes','paid'], true);
+        } elseif (is_bool($confirmParam)) {
+            $confirmPaid = $confirmParam;
+        }
+
+        try {
+            $this->pdo->beginTransaction();
+
+            if ($confirmPaid) {
+                // Only privileged users should confirm payments
+                $this->checkAuthentication();
+                // Set payment success and update order
+                $this->paymentModel->updateStatus($payment['id'], 'success', $payment['transaction_id'], $existingCb);
+                $this->orderModel->updatePaymentStatus($order['id'], 'paid', $payment['transaction_id']);
+
+                // Reduce stock exactly once
+                $this->reduceOrderStockIfNeeded($order['id'], $order['order_number']);
+
+                // Notify
+                $this->notificationModel->notifyPaymentReceived(
+                    $order['id'],
+                    $order['order_number'],
+                    $order['total_amount']
+                );
+            } else {
+                // Update callback_data flags only, keep payment and order status unchanged (enum-safe)
+                $this->paymentModel->updateStatus($payment['id'], $payment['status'] ?? 'pending', $payment['transaction_id'], $existingCb);
+            }
+
+            $this->pdo->commit();
+
+            $this->sendSuccess([
+                'order_number' => $order['order_number'],
+                'payment_status' => $confirmPaid ? 'paid' : $order['payment_status'],
+                'requested_verification' => (bool)$flag,
+                'flags' => $existingCb
+            ]);
+        } catch (Exception $e) {
+            $this->pdo->rollback();
+            $this->sendError('Manual update failed: ' . $e->getMessage(), 500);
+        }
     }
 }
 
@@ -302,6 +467,10 @@ switch ($action) {
         break;
     case 'check-status':
         $paymentController->checkStatus();
+        break;
+    case 'manual-update':
+    case 'manualUpdate':
+        $paymentController->manualUpdate();
         break;
     case 'stats':
         $paymentController->getStats();

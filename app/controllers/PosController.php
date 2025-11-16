@@ -30,6 +30,7 @@ class PosController extends BaseController {
     public function getProducts() {
         try {
             $this->checkAuthentication();
+            $this->checkPermission('pos.access');
             
         $categoryId = $_GET['category_id'] ?? null;
         $search = $_GET['search'] ?? '';
@@ -44,8 +45,22 @@ class PosController extends BaseController {
                 }
                 $products = $this->productModel->findAllWithCategory($conditions, 'name ASC', 100);
             }
-            
-            $this->sendSuccess($products);
+
+            // Normalize numeric fields to ensure consistent types for frontend
+            $normalized = array_map(function($p) {
+                // Ensure id exists and is integer
+                $p['id'] = isset($p['id']) ? intval($p['id']) : (isset($p['product_id']) ? intval($p['product_id']) : null);
+                // Normalize common numeric fields
+                if (isset($p['stock_quantity'])) $p['stock_quantity'] = intval($p['stock_quantity']);
+                if (isset($p['min_stock_level'])) $p['min_stock_level'] = intval($p['min_stock_level']);
+                if (isset($p['max_stock_level'])) $p['max_stock_level'] = intval($p['max_stock_level']);
+                if (isset($p['price'])) $p['price'] = floatval($p['price']);
+                if (isset($p['unit_price'])) $p['unit_price'] = floatval($p['unit_price']);
+                return $p;
+            }, $products ?: []);
+
+            // Send in a consistent envelope for flexibility on the frontend
+            $this->sendSuccess(['products' => $normalized]);
         } catch (Exception $e) {
             $this->sendError($e->getMessage(), 500);
         }
@@ -57,6 +72,7 @@ class PosController extends BaseController {
     public function getCategories() {
         try {
             $this->checkAuthentication();
+            $this->checkPermission('pos.access');
         $categories = $this->categoryModel->getActive();
         $this->sendSuccess($categories);
         } catch (Exception $e) {
@@ -70,6 +86,7 @@ class PosController extends BaseController {
     public function getByBarcode() {
         try {
             $this->checkAuthentication();
+            $this->checkPermission('pos.access');
         $barcode = $_GET['barcode'] ?? '';
         
         if (empty($barcode)) {
@@ -102,6 +119,7 @@ class PosController extends BaseController {
     public function searchCustomers() {
         try {
             $this->checkAuthentication();
+            $this->checkPermission('pos.access');
             $query = $_GET['q'] ?? '';
             
             if (strlen($query) < 2) {
@@ -132,8 +150,7 @@ class PosController extends BaseController {
             error_log('📨 CONTENT-TYPE: ' . ($_SERVER['CONTENT_TYPE'] ?? 'NOT SET'));
             error_log('📨 REQUEST METHOD: ' . ($_SERVER['REQUEST_METHOD'] ?? 'NOT SET'));
             
-            // Skip permission check for now - might be causing issues
-            // $this->checkPermission('transactions.create');
+            $this->checkPermission('transactions.create');
             
             // Get request data (reads php://input once)
             $data = $this->getRequestData();
@@ -291,17 +308,15 @@ class PosController extends BaseController {
             // Create transaction with items (this already has transaction handling)
             $transactionId = $this->transactionModel->createWithItems($transactionData, $processedItems);
             
-            // DISABLED: Log the transaction creation (temporarily disabled for debugging)
-            // try {
-            //     $this->logAction('create', 'transaction', $transactionId, [
-            //         'total_amount' => $total_amount,
-            //         'items_count' => count($data['items']),
-            //         'payment_method' => $data['payment_method']
-            //     ]);
-            // } catch (Exception $logError) {
-            //     // Don't fail transaction if logging fails
-            //     error_log('Failed to log transaction: ' . $logError->getMessage());
-            // }
+            try {
+                $this->logAction('create', 'transaction', $transactionId, [
+                    'total_amount' => $total_amount,
+                    'items_count' => count($data['items']),
+                    'payment_method' => $data['payment_method']
+                ]);
+            } catch (Exception $logError) {
+                error_log('Failed to log transaction: ' . $logError->getMessage());
+            }
             
             // Get complete transaction details
             $transaction = $this->transactionModel->findWithDetails($transactionId);
@@ -385,18 +400,17 @@ class PosController extends BaseController {
             error_log($e->getTraceAsString());
             error_log('═══════════════════════════════════════════════════');
             
-            // DISABLED: Log to file (not database to avoid secondary failures) - temporarily disabled for debugging
-            // try {
-            //     $this->logger->error('POS Transaction failed', [
-            //         'error' => $e->getMessage(),
-            //         'user_id' => $this->user['id'] ?? null,
-            //         'data' => $data ?? [],
-            //         'file' => $e->getFile(),
-            //         'line' => $e->getLine()
-            //     ]);
-            // } catch (Exception $logError) {
-            //     error_log('Failed to log error: ' . $logError->getMessage());
-            // }
+            try {
+                $this->logger->error('POS Transaction failed', [
+                    'error' => $e->getMessage(),
+                    'user_id' => $this->user['id'] ?? null,
+                    'data' => $data ?? [],
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ]);
+            } catch (Exception $logError) {
+                error_log('Failed to log error: ' . $logError->getMessage());
+            }
             
             // Send detailed error in development
             $errorMessage = $e->getMessage();
@@ -429,6 +443,7 @@ class PosController extends BaseController {
     public function holdTransaction() {
         try {
             $this->checkAuthentication();
+            $this->checkPermission('pos.access');
             
             $data = $this->getRequestData();
             
@@ -449,12 +464,11 @@ class PosController extends BaseController {
             
             $holdId = $this->pdo->lastInsertId();
             
-            // DISABLED: Log action (with error handling) - temporarily disabled for debugging
-            // try {
-            //     $this->logAction('create', 'hold_transaction', $holdId);
-            // } catch (Exception $logError) {
-            //     error_log('Failed to log hold transaction: ' . $logError->getMessage());
-            // }
+            try {
+                $this->logAction('create', 'hold_transaction', $holdId);
+            } catch (Exception $logError) {
+                error_log('Failed to log hold transaction: ' . $logError->getMessage());
+            }
             
             $result = [
                 'message' => 'Transaction held successfully',
@@ -473,6 +487,7 @@ class PosController extends BaseController {
     public function getHeldTransactions() {
         try {
             $this->checkAuthentication();
+            $this->checkPermission('pos.access');
             
             $sql = "SELECT ht.*, c.name as customer_name 
                     FROM hold_transactions ht 
@@ -500,6 +515,7 @@ class PosController extends BaseController {
     public function resumeTransaction() {
         try {
             $this->checkAuthentication();
+            $this->checkPermission('pos.access');
             
             $holdId = $_GET['id'] ?? null;
             if (!$holdId) {
@@ -524,12 +540,11 @@ class PosController extends BaseController {
             $deleteStmt = $this->pdo->prepare($deleteSql);
             $deleteStmt->execute([$holdId]);
             
-            // DISABLED: Log action (with error handling) - temporarily disabled for debugging
-            // try {
-            //     $this->logAction('resume', 'hold_transaction', $holdId);
-            // } catch (Exception $logError) {
-            //     error_log('Failed to log resume transaction: ' . $logError->getMessage());
-            // }
+            try {
+                $this->logAction('resume', 'hold_transaction', $holdId);
+            } catch (Exception $logError) {
+                error_log('Failed to log resume transaction: ' . $logError->getMessage());
+            }
             
             $this->sendSuccess($hold);
         } catch (Exception $e) {
@@ -543,6 +558,7 @@ class PosController extends BaseController {
     public function getStats() {
         try {
             $this->checkAuthentication();
+            $this->checkPermission('pos.access');
             
             $today = date('Y-m-d');
             $stats = $this->transactionModel->getSalesStats($today, $today);
@@ -600,6 +616,7 @@ class PosController extends BaseController {
     public function getRecentTransactions() {
         try {
             $this->checkAuthentication();
+            $this->checkPermission('pos.access');
             
             $limit = $_GET['limit'] ?? 10;
             $transactions = $this->transactionModel->findAllWithDetails(

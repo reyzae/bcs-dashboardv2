@@ -33,24 +33,35 @@ $page_title = 'User Management';
 $additional_css = [];
 $additional_js = [];
 
+// Aktifkan compact header untuk tampilan header yang rapi
+$header_compact = true;
+
 // Include header
 require_once 'includes/header.php';
 ?>
 
 <!-- Page Content -->
 <div class="content">
-    <!-- Page Header -->
-    <div style="margin-bottom: 2rem;">
-        <h1 style="font-size: 1.875rem; font-weight: 700; color: #111827; display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
-            <i class="fas fa-user-shield" style="color: #667eea;"></i>
-                User Management
-            </h1>
-        <p style="color: #6b7280; font-size: 0.875rem;">Manage system users, roles, and permissions</p>
+    <!-- Page Header (Uniform Card Style) -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-user-shield"></i> User Management
+            </h3>
+            <div class="card-actions action-buttons">
+                <button class="btn btn-info btn-sm" id="refreshUsers">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <p style="color: var(--gray-600); font-size: 0.875rem;">Manage system users, roles, and permissions</p>
+        </div>
     </div>
 
     <!-- Stats Cards with Trends & Animated Counters -->
     <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-        <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-left-color: #4c51bf;">
+        <div class="stat-card" style="background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%); color: white; border-left-color: #4c51bf;">
             <div>
                 <h4 style="font-size: 0.875rem; font-weight: 500; opacity: 0.9; margin-bottom: 0.5rem;">Total Users</h4>
                 <h2 class="stat-value" id="totalUsers" style="font-size: 2rem; font-weight: 700; color: white;">0</h2>
@@ -125,7 +136,7 @@ require_once 'includes/header.php';
             <i class="fas fa-user-plus"></i> Add User
         </button>
         
-        <div id="activeFiltersCount" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 0.375rem 0.875rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: none;">
+        <div id="activeFiltersCount" style="background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%); color: white; padding: 0.375rem 0.875rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: none;">
             <i class="fas fa-filter"></i> <span id="filterCount">0</span> active
         </div>
     </div>
@@ -158,7 +169,7 @@ require_once 'includes/header.php';
                     <tbody>
                         <tr id="loadingRow">
                             <td colspan="8" style="text-align: center; padding: 3rem;">
-                                <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: #667eea;"></i>
+                                <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary-color);"></i>
                                 <p style="margin-top: 1rem; color: #6b7280;">Loading users...</p>
                             </td>
                         </tr>
@@ -176,7 +187,7 @@ require_once 'includes/header.php';
 <div class="modal" id="userModal">
     <div class="modal-dialog" style="max-width: 700px;">
         <div class="modal-content">
-            <div class="modal-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem;">
+            <div class="modal-header" style="background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%); color: white; padding: 1.5rem;">
                 <h3 id="userModalTitle" style="margin: 0; font-size: 1.25rem; font-weight: 700; color: white;">
                     <i class="fas fa-user-plus"></i> Add New User
                 </h3>
@@ -190,7 +201,7 @@ require_once 'includes/header.php';
                     <!-- Full Name -->
                     <div class="form-group" style="margin-bottom: 1.25rem;">
                         <label for="fullName" class="form-label" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                            <i class="fas fa-user" style="color: #667eea;"></i>
+                            <i class="fas fa-user" style="color: var(--primary-color);"></i>
                             Full Name <span style="color: #ef4444;">*</span>
                             </label>
                         <input type="text" id="fullName" class="form-control" placeholder="Enter full name" required style="width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.875rem;">
@@ -200,7 +211,7 @@ require_once 'includes/header.php';
                     <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
                         <div class="form-group">
                             <label for="username" class="form-label" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                <i class="fas fa-id-card" style="color: #667eea;"></i>
+                                <i class="fas fa-id-card" style="color: var(--primary-color);"></i>
                                 Username <span style="color: #ef4444;">*</span>
                             </label>
                             <input type="text" id="username" class="form-control" placeholder="Enter username" required style="width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.875rem;">

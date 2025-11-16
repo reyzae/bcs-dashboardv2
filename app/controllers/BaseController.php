@@ -55,19 +55,11 @@ abstract class BaseController {
      * Check if user has required role
      */
     protected function requireRole($requiredRoles) {
-        // Ensure user is authenticated first
-        if ($this->user === null) {
-            $this->checkAuthentication();
-        }
-        
+        // Delegate to centralized PermissionMiddleware
         if (!is_array($requiredRoles)) {
             $requiredRoles = [$requiredRoles];
         }
-        
-        if (!in_array($this->user['role'], $requiredRoles)) {
-            $this->sendResponse(['error' => 'Insufficient permissions'], 403);
-            exit();
-        }
+        PermissionMiddleware::checkRoles($requiredRoles);
     }
     
     /**
@@ -76,6 +68,9 @@ abstract class BaseController {
     public function sendResponse($data, $statusCode = 200) {
         http_response_code($statusCode);
         header('Content-Type: application/json');
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: 0');
         
         // Ensure consistent response format
         if (!isset($data['success'])) {

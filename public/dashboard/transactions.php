@@ -36,68 +36,71 @@ $page_title = 'Transactions';
 $additional_css = [];
 $additional_js = [];
 
+// Aktifkan compact header untuk tampilan header yang rapi
+$header_compact = true;
+
 // Include header
 require_once 'includes/header.php';
 ?>
 
 <!-- Page Content -->
 <div class="content">
-    <!-- Page Header -->
-    <div style="margin-bottom: 2rem;">
-        <h1 style="font-size: 1.875rem; font-weight: 700; color: #111827; display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
-            <i class="fas fa-receipt" style="color: #667eea;"></i>
-            Transactions
-        </h1>
-        <p style="color: #6b7280; font-size: 0.875rem;">Manage and view all sales transactions</p>
+    <!-- Page Header (Uniform Card Style) -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-receipt"></i> Transactions
+            </h3>
+            <div class="card-actions action-buttons">
+                <button class="btn btn-info btn-sm" id="refreshTransactions">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <p style="color: var(--gray-600); font-size: 0.875rem;">Manage and view all sales transactions</p>
+        </div>
     </div>
 
             <!-- Stats Cards with Trends -->
-            <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-                <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-left-color: #4c51bf;">
+            <div class="stats-grid stats-grid--wide">
+                <div class="stat-card stat-primary stat-card--regular">
                     <div>
-                        <h4 style="font-size: 0.875rem; font-weight: 500; opacity: 0.9; margin-bottom: 0.5rem;">Today's Transactions</h4>
-                        <h2 class="stat-value" id="todayTransactions" style="font-size: 2rem; font-weight: 700; color: white;">0</h2>
+                        <div class="stat-label">Today's Transactions</div>
+                        <div class="stat-value" id="todayTransactions">0</div>
                     </div>
-                    <div class="stat-icon" style="background: rgba(255,255,255,0.2);">
-                    <i class="fas fa-receipt"></i>
+                    <div class="stat-icon"><i class="fas fa-receipt"></i></div>
+                </div>
+
+                <div class="stat-card stat-success stat-card--regular">
+                    <div>
+                        <div class="stat-label">Today's Revenue</div>
+                        <div class="stat-value" id="todayRevenue">Rp 0</div>
+                    </div>
+                    <div class="stat-icon"><i class="fas fa-coins"></i></div>
+                </div>
+
+                <div class="stat-card stat-info stat-card--regular">
+                    <div>
+                        <div class="stat-label">This Month Revenue</div>
+                        <div class="stat-value" id="monthRevenue">Rp 0</div>
+                    </div>
+                    <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
+                </div>
+
+                <div class="stat-card stat-warning stat-card--regular">
+                    <div>
+                        <div class="stat-label">Pending Transactions</div>
+                        <div class="stat-value" id="pendingTransactions">0</div>
+                    </div>
+                    <div class="stat-icon"><i class="fas fa-clock"></i></div>
                 </div>
             </div>
-
-                <div class="stat-card" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border-left-color: #047857;">
-                    <div>
-                        <h4 style="font-size: 0.875rem; font-weight: 500; opacity: 0.9; margin-bottom: 0.5rem;">Today's Revenue</h4>
-                        <h2 class="stat-value" id="todayRevenue" style="font-size: 2rem; font-weight: 700; color: white;">Rp 0</h2>
-        </div>
-                    <div class="stat-icon" style="background: rgba(255,255,255,0.2);">
-                        <i class="fas fa-coins"></i>
-                </div>
-            </div>
-
-                <div class="stat-card" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; border-left-color: #1e40af;">
-                    <div>
-                        <h4 style="font-size: 0.875rem; font-weight: 500; opacity: 0.9; margin-bottom: 0.5rem;">This Month Revenue</h4>
-                        <h2 class="stat-value" id="monthRevenue" style="font-size: 2rem; font-weight: 700; color: white;">Rp 0</h2>
-        </div>
-                    <div class="stat-icon" style="background: rgba(255,255,255,0.2);">
-                    <i class="fas fa-chart-line"></i>
-                </div>
-            </div>
-
-                <div class="stat-card" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; border-left-color: #b45309;">
-                    <div>
-                        <h4 style="font-size: 0.875rem; font-weight: 500; opacity: 0.9; margin-bottom: 0.5rem;">Pending Transactions</h4>
-                        <h2 class="stat-value" id="pendingTransactions" style="font-size: 2rem; font-weight: 700; color: white;">0</h2>
-                    </div>
-                    <div class="stat-icon" style="background: rgba(255,255,255,0.2);">
-                        <i class="fas fa-clock"></i>
-                    </div>
-        </div>
-    </div>
 
             <!-- View Toggle + Auto Refresh -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
                 <div style="display: flex; gap: 0.5rem; background: white; padding: 0.25rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                    <button class="view-toggle-btn active" data-view="table" style="padding: 0.5rem 1rem; border: none; background: #667eea; color: white; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-size: 0.875rem;">
+                    <button class="view-toggle-btn active" data-view="table" style="padding: 0.5rem 1rem; border: none; background: var(--primary-color); color: white; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-size: 0.875rem;">
                         <i class="fas fa-table"></i> Table View
                     </button>
                     <button class="view-toggle-btn" data-view="chart" style="padding: 0.5rem 1rem; border: none; background: transparent; color: #6b7280; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-size: 0.875rem;">
@@ -107,7 +110,7 @@ require_once 'includes/header.php';
                 
                 <div style="display: flex; gap: 1rem; align-items: center;">
                     <div style="display: flex; align-items: center; gap: 0.5rem; background: white; padding: 0.5rem 1rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                        <i class="fas fa-sync-alt" style="color: #667eea;"></i>
+                        <i class="fas fa-sync-alt" style="color: var(--primary-color);"></i>
                         <span style="font-size: 0.875rem; color: #6b7280;">Auto Refresh:</span>
                         <select id="autoRefreshSelect" style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 0.25rem 0.5rem; font-size: 0.875rem;">
                             <option value="0">Off</option>
@@ -156,7 +159,7 @@ require_once 'includes/header.php';
                     <i class="fas fa-times"></i> Clear
                 </button>
                 
-                <div id="activeFiltersCount" style="margin-left: auto; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 0.375rem 0.875rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: none;">
+                <div id="activeFiltersCount" style="margin-left: auto; background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%); color: white; padding: 0.375rem 0.875rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: none;">
                     <i class="fas fa-filter"></i> <span id="filterCount">0</span> active
         </div>
     </div>
@@ -500,6 +503,11 @@ class TransactionManager {
         this.setupEventListeners();
         this.setupKeyboardShortcuts();
         this.updateLastUpdated();
+        const autoRefreshSelect = document.getElementById('autoRefreshSelect');
+        if (autoRefreshSelect) {
+            autoRefreshSelect.value = '60';
+            this.setupAutoRefresh(60);
+        }
     }
 
     async loadStats() {

@@ -70,6 +70,11 @@
     }
 }
 
+/* Hide close button on large screens */
+@media (min-width: 1025px) {
+    .sidebar-close { display: none; }
+}
+
 /* ========================================
    SMALL DEVICES - Tablets & Mobile Landscape (< 768px)
    ======================================== */
@@ -92,6 +97,18 @@
     
     .header-title {
         font-size: 1.25rem;
+    }
+
+    /* Keep compact headers on one line and tighten spacing */
+    .main-header.compact-header {
+        flex-wrap: nowrap;
+        padding: 0.5rem 0.75rem;
+    }
+    .main-header.compact-header .header-right { gap: 0.4rem; }
+    .main-header.compact-header .header-icon-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
     }
     
     /* Grids - all to single column */

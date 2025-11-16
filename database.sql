@@ -652,8 +652,24 @@ INSERT INTO `settings` (`key`, `value`, `type`, `description`) VALUES
 ('force_strong_password', '1', 'boolean', 'Force users to use strong passwords'),
 ('enable_activity_log', '1', 'boolean', 'Enable audit logging'),
 ('debug_mode', '0', 'boolean', 'Enable debug mode'),
-('performance_monitoring', '0', 'boolean', 'Enable performance monitoring')
+('performance_monitoring', '0', 'boolean', 'Enable performance monitoring'),
+('bank_default', 'bca', 'string', 'Default bank for transfer'),
+('bank_bca_name', 'REYZA WIRAKUSUMA', 'string', 'BCA account name'),
+('bank_bca_account', '1481899929', 'string', 'BCA account number'),
+('bank_bri_name', '', 'string', 'BRI account name'),
+('bank_bri_account', '', 'string', 'BRI account number'),
+('bank_blu_bca_name', '', 'string', 'BLU BCA account name'),
+('bank_blu_bca_account', '', 'string', 'BLU BCA account number'),
+('transfer_use_va', '0', 'boolean', 'Use virtual account for bank transfers')
 ON DUPLICATE KEY UPDATE `key`=`key`;
+
+UPDATE `settings` new JOIN `settings` old ON new.`key` = 'bank_bri_name' AND old.`key` = 'bank_mandiri_name' SET new.`value` = old.`value`;
+UPDATE `settings` new JOIN `settings` old ON new.`key` = 'bank_bri_account' AND old.`key` = 'bank_mandiri_account' SET new.`value` = old.`value`;
+UPDATE `settings` new JOIN `settings` old ON new.`key` = 'bank_blu_bca_name' AND old.`key` = 'bank_bni_name' SET new.`value` = old.`value`;
+UPDATE `settings` new JOIN `settings` old ON new.`key` = 'bank_blu_bca_account' AND old.`key` = 'bank_bni_account' SET new.`value` = old.`value`;
+DELETE FROM `settings` WHERE `key` IN ('bank_mandiri_name','bank_mandiri_account','bank_bni_name','bank_bni_account');
+UPDATE `settings` SET `value`='bri' WHERE `key`='bank_default' AND `value`='mandiri';
+UPDATE `settings` SET `value`='blu_bca' WHERE `key`='bank_default' AND `value`='bni';
 
 -- Insert sample products (optional - for testing)
 INSERT INTO `products` (`sku`, `barcode`, `name`, `description`, `category_id`, `price`, `cost_price`, `stock_quantity`, `min_stock_level`, `unit`) VALUES

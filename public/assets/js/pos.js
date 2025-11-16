@@ -115,7 +115,7 @@ class POSManager {
                 this.products = (rawProducts || []).map(p => ({
                     ...p,
                     // Ensure numeric comparisons work consistently
-                    id: (p && p.id !== undefined) ? parseInt(p.id) : p.id,
+                    id: (p && p.id !== undefined) ? parseInt(p.id) : ((p && p.product_id !== undefined) ? parseInt(p.product_id) : p.id),
                     stock_quantity: (p && p.stock_quantity !== undefined) ? parseInt(p.stock_quantity) : 0,
                     min_stock_level: (p && p.min_stock_level !== undefined) ? parseInt(p.min_stock_level) : 0,
                     price: (p && p.price !== undefined) ? parseFloat(p.price) : 0
@@ -275,14 +275,19 @@ class POSManager {
         console.log('🖱️ window.posManager:', window.posManager);
         console.log('🖱️ this.products:', this.products);
         
-        if (!productId || isNaN(productId)) {
+        const pid = parseInt(productId);
+        if (!pid || isNaN(pid)) {
             console.error('❌ Invalid product ID:', productId);
             alert('Invalid product ID: ' + productId);
             return;
         }
         
         // Check if product is out of stock
-        const product = this.products.find(p => p.id === productId);
+        const product = this.products.find(p => {
+            const id = (p && p.id !== undefined) ? parseInt(p.id) : null;
+            const altId = (p && p.product_id !== undefined) ? parseInt(p.product_id) : null;
+            return id === pid || altId === pid;
+        });
         console.log('🖱️ Found product:', product);
         
         if (!product) {
@@ -466,7 +471,12 @@ class POSManager {
     }
 
     openProductModal(productId) {
-        const product = this.products.find(p => p.id === productId);
+        const pid = parseInt(productId);
+        const product = this.products.find(p => {
+            const id = (p && p.id !== undefined) ? parseInt(p.id) : null;
+            const altId = (p && p.product_id !== undefined) ? parseInt(p.product_id) : null;
+            return id === pid || altId === pid;
+        });
         if (!product) return;
 
         if (product.stock_quantity <= 0) {
@@ -509,7 +519,12 @@ class POSManager {
     }
 
     addToCart(productId = null, quantity = 1) {
-        const product = productId ? this.products.find(p => p.id === productId) : this.selectedProduct;
+        const pid = productId ? parseInt(productId) : null;
+        const product = pid !== null ? this.products.find(p => {
+            const id = (p && p.id !== undefined) ? parseInt(p.id) : null;
+            const altId = (p && p.product_id !== undefined) ? parseInt(p.product_id) : null;
+            return id === pid || altId === pid;
+        }) : this.selectedProduct;
         if (!product) return;
 
         if (product.stock_quantity < quantity) {
@@ -872,25 +887,34 @@ class POSManager {
         });
         document.querySelector(`[data-method="${method}"]`)?.classList.add('active');
 
-        // Show/hide payment amount input (with null check)
-        const paymentAmountDiv = document.querySelector('.payment-amount');
-        const changeAmountDiv = document.getElementById('changeAmount');
+        // Kontrol input Amount Received mengikuti desain baru (.payment-input-wrapper)
+        const paymentInputWrapper = document.querySelector('.payment-input-wrapper');
         const paymentAmountInput = document.getElementById('paymentAmount');
-        
-        if (paymentAmountDiv) {
+        const changeAmountDiv = document.getElementById('changeAmount');
+        const nonCashNote = document.getElementById('nonCashNote');
+
+        if (paymentAmountInput) {
             if (method === 'cash') {
-                paymentAmountDiv.style.display = 'block';
+                // Aktifkan input untuk pembayaran tunai
+                paymentAmountInput.disabled = false;
+                paymentAmountInput.placeholder = '0';
+                if (paymentInputWrapper) paymentInputWrapper.style.opacity = '';
+                // Tampilkan change dan hitung ulang
+                if (changeAmountDiv) changeAmountDiv.style.display = 'block';
+                if (nonCashNote) nonCashNote.style.display = 'none';
                 this.updateChangeAmount();
-                if (paymentAmountInput) {
-                    setTimeout(() => {
-                        paymentAmountInput.focus();
-                    }, 100);
-                }
+                setTimeout(() => {
+                    paymentAmountInput.focus();
+                }, 100);
             } else {
-                paymentAmountDiv.style.display = 'none';
-                if (changeAmountDiv) {
-                    changeAmountDiv.style.display = 'none';
-                }
+                // Nonaktifkan input untuk QRIS/Transfer/Card (non-cash)
+                paymentAmountInput.disabled = true;
+                paymentAmountInput.value = '';
+                paymentAmountInput.placeholder = 'Non-cash';
+                if (paymentInputWrapper) paymentInputWrapper.style.opacity = '0.7';
+                // Sembunyikan change
+                if (changeAmountDiv) changeAmountDiv.style.display = 'none';
+                if (nonCashNote) nonCashNote.style.display = 'block';
             }
         }
     }
@@ -1019,14 +1043,15 @@ class POSManager {
         // Build payment info section
         let paymentInfoHTML = '';
         if (paymentInfo && this.paymentMethod !== 'cash') {
-            if (this.paymentMethod === 'qris' && paymentInfo.qr_code_url) {
+            if (this.paymentMethod === 'qris') {
+                const qrImage = (paymentInfo && paymentInfo.qr_code_url) ? paymentInfo.qr_code_url : '../assets/img/qris-gopay.svg';
                 paymentInfoHTML = `
                     <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; border: 2px solid #e5e7eb;">
                         <h3 style="color: #374151; margin-bottom: 1rem; font-size: 18px;">
                             <i class="fas fa-qrcode"></i> QR Code Payment
                         </h3>
                         <div style="text-align: center; margin-bottom: 1rem;">
-                            <img src="${paymentInfo.qr_code_url}" alt="QR Code" 
+                            <img src="${Utils.resolveImageUrl(qrImage)}" alt="QR Code" 
                                  style="max-width: 250px; width: 100%; border: 2px solid #e5e7eb; border-radius: 8px; padding: 1rem; background: white;">
                         </div>
                         <div style="background: #f3f4f6; padding: 1rem; border-radius: 6px; font-size: 14px; color: #6b7280;">
@@ -1036,7 +1061,7 @@ class POSManager {
                             3. Scan QR code di atas<br>
                             4. Konfirmasi pembayaran
                         </div>
-                        ${paymentInfo.expired_at ? `
+                        ${(paymentInfo && paymentInfo.expired_at) ? `
                         <div style="margin-top: 1rem; text-align: center; font-size: 12px; color: #ef4444;">
                             <i class="fas fa-clock"></i> Expires: ${new Date(paymentInfo.expired_at).toLocaleString('id-ID')}
                         </div>

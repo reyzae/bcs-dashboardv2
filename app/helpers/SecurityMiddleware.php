@@ -115,7 +115,14 @@ class SecurityMiddleware {
         }
         
         if (is_string($data)) {
-            return htmlspecialchars(trim($data), ENT_QUOTES, 'UTF-8');
+            $value = trim($data);
+            // Remove unsafe control characters except newlines and tabs
+            $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $value);
+            // Limit excessively long strings
+            if (strlen($value) > 5000) {
+                $value = substr($value, 0, 5000);
+            }
+            return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
         }
         
         return $data;
@@ -282,6 +289,28 @@ class SecurityMiddleware {
         foreach ($files as $file) {
             if (is_file($file) && ($now - filemtime($file)) > $maxAge) {
                 unlink($file);
+            }
+        }
+    }
+
+    /**
+     * Clean up expired remember-me tokens
+     */
+    public static function cleanupRememberTokens() {
+        $dir = __DIR__ . '/../../storage/sessions/remember_tokens';
+        if (!is_dir($dir)) {
+            return;
+        }
+        $now = time();
+        foreach (glob($dir . '/*.json') as $file) {
+            if (!is_file($file)) continue;
+            $json = @file_get_contents($file);
+            $data = $json ? json_decode($json, true) : null;
+            $expired = is_array($data) && isset($data['expiry']) && $data['expiry'] < $now;
+            // Fallback to file age > 90 days
+            $tooOld = ($now - filemtime($file)) > (90 * 86400);
+            if ($expired || $tooOld) {
+                @unlink($file);
             }
         }
     }

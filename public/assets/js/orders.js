@@ -28,9 +28,17 @@ class OrdersPage {
             const el = document.getElementById(tab.id);
             if (el) {
                 el.addEventListener('click', () => {
+                    // Update active status
                     this.activeStatus = tab.status;
                     const label = document.getElementById('activeStatusLabel');
                     if (label) label.textContent = tab.status;
+
+                    // Toggle active class on tabs for visual feedback
+                    const allTabButtons = document.querySelectorAll('.status-tab-btn');
+                    allTabButtons.forEach(btn => btn.classList.remove('active'));
+                    el.classList.add('active');
+
+                    // Reload orders for selected tab
                     this.loadOrders(tab.status);
                 });
             }
@@ -140,7 +148,12 @@ class OrdersPage {
             btn.addEventListener('click', (e) => {
                 const id = parseInt(btn.getAttribute('data-id'), 10);
                 const action = btn.getAttribute('data-action');
-                this.handleAction(id, action);
+                const orderNumber = btn.getAttribute('data-order-number');
+                if (action === 'accept-payment') {
+                    this.handleAcceptPayment(orderNumber, btn);
+                } else {
+                    this.handleAction(id, action);
+                }
             });
         });
     }
@@ -148,24 +161,28 @@ class OrdersPage {
     actionButtons(order) {
         const id = order.id;
         const status = (order.order_status || '').toLowerCase();
+        const paymentStatus = (order.payment_status || '').toLowerCase();
         const btn = (icon, label, action, color = 'primary') => {
-            return `<button class="btn btn-${color} btn-sm" data-id="${id}" data-action="${action}" style="margin-right:6px;"><i class="fas fa-${icon}"></i> ${label}</button>`;
+            return `<button class="btn btn-${color} btn-sm" data-id="${id}" data-action="${action}"><i class="fas fa-${icon}"></i> ${label}</button>`;
         };
 
-        // Define transitions
+        let content = '';
         if (status === 'pending') {
-            return btn('play', 'Mulai', 'processing', 'primary') + btn('times', 'Batal', 'cancelled', 'danger');
+            content = btn('play', 'Mulai', 'processing', 'primary') + btn('times', 'Batal', 'cancelled', 'danger');
+        } else if (status === 'processing') {
+            content = btn('check-circle', 'Selesai', 'completed', 'success') + btn('ban', 'Batal', 'cancelled', 'danger');
+        } else if (status === 'completed') {
+            content = `<span class="badge badge-success">Selesai</span>`;
+        } else if (status === 'cancelled') {
+            content = `<span class="badge badge-danger">Dibatalkan</span>`;
+        } else {
+            content = `<span class="badge badge-secondary">${status}</span>`;
         }
-        if (status === 'processing') {
-            return btn('check-circle', 'Selesai', 'completed', 'success') + btn('ban', 'Batal', 'cancelled', 'danger');
+        // Payment actions: allow Accept Payment while payment is still pending
+        if (paymentStatus === 'pending') {
+            content += ` <button class="btn btn-success btn-sm" title="Verifikasi: Pembayaran sudah diterima" data-id="${id}" data-order-number="${order.order_number}" data-action="accept-payment"><i class="fas fa-check"></i> Payment Accepted</button>`;
         }
-        if (status === 'completed') {
-            return `<span class="badge badge-success">Selesai</span>`;
-        }
-        if (status === 'cancelled') {
-            return `<span class="badge badge-danger">Dibatalkan</span>`;
-        }
-        return `<span class="badge badge-secondary">${status}</span>`;
+        return `<div class="action-buttons">${content}</div>`;
     }
 
     async handleAction(id, targetStatus) {
@@ -204,6 +221,35 @@ class OrdersPage {
         if (st === 'completed') return '<span class="badge badge-success">COMPLETED</span>';
         if (st === 'cancelled') return '<span class="badge badge-danger">CANCELLED</span>';
         return `<span class="badge badge-secondary">${status || '-'}</span>`;
+    }
+
+    async handleAcceptPayment(orderNumber, buttonEl) {
+        if (!orderNumber) return;
+        try {
+            const original = buttonEl.innerHTML;
+            buttonEl.disabled = true;
+            buttonEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+            const resp = await app.apiCall(`../api.php?controller=payment&action=manualUpdate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_number: orderNumber, confirm_paid: true })
+            });
+            if (resp.success) {
+                app.showToast('Pembayaran diterima', 'success');
+                this.loadCounts();
+                this.loadOrders(this.activeStatus);
+            } else {
+                throw new Error(resp.message || 'Gagal mengonfirmasi pembayaran');
+            }
+        } catch (err) {
+            console.error('Accept payment failed', err);
+            app.showToast('Gagal mengonfirmasi pembayaran', 'error');
+        } finally {
+            if (buttonEl) {
+                buttonEl.disabled = false;
+                buttonEl.innerHTML = '<i class="fas fa-check"></i> Payment Accepted';
+            }
+        }
     }
 }
 

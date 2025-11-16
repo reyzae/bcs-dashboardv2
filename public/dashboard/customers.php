@@ -11,6 +11,7 @@ requireAuth();
 requireRole(['admin', 'manager']);
 
 $page_title = 'Customers Management';
+$header_compact = true; // compact header: title aligns with icons
 $additional_css = [];
 $additional_js = [];
 
@@ -48,13 +49,13 @@ require_once 'includes/header.php';
     left: 0;
     width: 4px;
     height: 100%;
-    background: var(--gradient, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
+    background: var(--gradient, linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%));
 }
 
 .stat-value {
     font-size: 2.5rem;
     font-weight: 800;
-    background: var(--gradient, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
+    background: var(--gradient, linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -86,8 +87,8 @@ require_once 'includes/header.php';
 
 .search-bar input:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .search-bar i {
@@ -112,7 +113,7 @@ require_once 'includes/header.php';
 }
 
 .btn-primary-modern {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
     color: white;
 }
 
@@ -130,7 +131,7 @@ require_once 'includes/header.php';
 }
 
 .table-modern thead {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
     color: white;
 }
 
@@ -220,10 +221,21 @@ require_once 'includes/header.php';
     display: flex !important;
 }
 
-/* Inline style display:flex overrides display:none */
-.modal-modern[style*="display: flex"] {
-    display: flex !important;
+.modal-modern.closing {
+    display: none !important;
 }
+
+.modal-content-modern.closing {
+    pointer-events: none !important;
+}
+
+/* Fallback: hidden attribute always hides modal */
+.modal-modern[hidden] {
+    display: none !important;
+}
+
+/* Inline style display:flex overrides display:none */
+/* Remove reliance on inline styles for display; use .show class only */
 
 .modal-content-modern {
     background: white !important;
@@ -366,14 +378,21 @@ require_once 'includes/header.php';
 </style>
 
 <div class="content">
-    <!-- Header -->
-    <div style="margin-bottom: 2rem;">
-        <h1 style="font-size: 2rem; font-weight: 800; color: #1f2937; margin: 0 0 0.5rem 0;">
-            <i class="fas fa-users" style="color: #667eea;"></i> Customers Management
-        </h1>
-        <p style="color: #6b7280; font-size: 0.95rem;">
-            Manage your customer database with ease
-        </p>
+    <!-- Header: Uniform Card Style -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-users"></i> Customers Management
+            </h3>
+            <div class="card-actions action-buttons">
+                <button class="btn btn-primary btn-sm" onclick="openAddModal()">
+                    <i class="fas fa-user-plus"></i> Add Customer
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <p style="color: #6b7280; font-size: 0.875rem;">Manage your customer database with ease</p>
+        </div>
     </div>
 
     <!-- Stats Cards -->
@@ -409,11 +428,7 @@ require_once 'includes/header.php';
             <i class="fas fa-search"></i>
             <input type="text" id="searchInput" placeholder="Search customers by name, code, phone...">
         </div>
-        <div style="margin-left: auto; display: flex; gap: 0.75rem;">
-            <button class="btn-modern btn-primary-modern" onclick="openAddModal()">
-                <i class="fas fa-plus-circle"></i> Add Customer
-            </button>
-        </div>
+        <div style="margin-left: auto; display: flex; gap: 0.75rem;"></div>
     </div>
 
     <!-- Customers Table -->
@@ -443,15 +458,15 @@ require_once 'includes/header.php';
 </div>
 
 <!-- Add/Edit Modal -->
-<div class="modal-modern" id="customerModal" style="display: none;" 
-     onclick="if(event.target.id==='customerModal'){this.style.display='none';this.classList.remove('show');document.getElementById('customerForm').reset();console.log('✅ BACKDROP CLICKED - MODAL CLOSED');}">
+<div class="modal-modern" id="customerModal" 
+     onclick="if(event.target.id==='customerModal'){closeModal();}">
     <div class="modal-content-modern" id="modalContentWrapper" onclick="event.stopPropagation();">
         <div class="modal-header-modern">
             <h3 style="margin: 0; font-weight: 700;">
                 <i class="fas fa-user-plus"></i> <span id="modalTitle">Add New Customer</span>
             </h3>
             <button type="button" id="modalCloseBtn" 
-                    onclick="document.getElementById('customerModal').style.display='none'; document.getElementById('customerModal').classList.remove('show'); document.getElementById('customerForm').reset(); console.log('✅ X CLICKED - MODAL CLOSED');"
+                    onclick="closeModal()"
                     style="background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer !important; pointer-events: auto !important; opacity: 0.9; transition: all 0.2s; padding: 0.5rem; position: relative; z-index: 10003;">
                 <i class="fas fa-times"></i>
             </button>
@@ -522,7 +537,7 @@ require_once 'includes/header.php';
 
                 <div style="display: flex; gap: 1rem; margin-top: 2rem; position: relative; z-index: 10001;">
                     <button type="button" id="modalCancelBtn" 
-                            onclick="document.getElementById('customerModal').style.display='none'; document.getElementById('customerModal').classList.remove('show'); document.getElementById('customerForm').reset(); console.log('✅ CANCEL CLICKED - MODAL CLOSED');"
+                            onclick="closeModal()"
                             class="btn-modern" style="flex: 1; background: #f3f4f6; color: #374151; cursor: pointer !important; pointer-events: auto !important; position: relative; z-index: 10002;">
                         <i class="fas fa-times"></i> Cancel
                     </button>
@@ -816,10 +831,9 @@ function openAddModal() {
     document.getElementById('customerActive').checked = true;
     
     const modal = document.getElementById('customerModal');
-    modal.style.display = 'flex'; // Force display with inline style
-    setTimeout(() => {
-        modal.classList.add('show');
-    }, 10);
+    modal.hidden = false;
+    modal.classList.remove('closing');
+    modal.classList.add('show');
     console.log('✅ Modal opened');
 }
 
@@ -837,71 +851,36 @@ function editCustomer(customer) {
     document.getElementById('customerActive').checked = customer.is_active == 1;
     
     const modal = document.getElementById('customerModal');
-    modal.style.display = 'flex'; // Force display with inline style
-    setTimeout(() => {
-        modal.classList.add('show');
-    }, 10);
+    modal.hidden = false;
+    modal.classList.remove('closing');
+    modal.classList.add('show');
     console.log('✅ Edit modal opened');
 }
 
 // Make closeModal available globally
 window.closeModal = function() {
-    console.log('🔴🔴🔴 closeModal() called - FORCING CLOSE 🔴🔴🔴');
-    
     try {
         const modal = document.getElementById('customerModal');
-        if (!modal) {
-            console.error('❌ Modal element not found!');
-            return;
-        }
-        
-        console.log('📍 Modal current display:', modal.style.display);
-        console.log('📍 Modal current classes:', modal.className);
-        
-        // NUCLEAR OPTION: Force hide with multiple methods
-        modal.style.display = 'none';
-        modal.style.visibility = 'hidden';
-        modal.style.opacity = '0';
-        modal.style.pointerEvents = 'none';
+        if (!modal) return;
         modal.classList.remove('show');
-        modal.setAttribute('aria-hidden', 'true');
-        
-        console.log('✅ Modal display set to:', modal.style.display);
-        console.log('✅ Modal visibility set to:', modal.style.visibility);
-        console.log('✅ Modal classes now:', modal.className);
-        
-        // Reset form
-        const form = document.getElementById('customerForm');
-        if (form) {
-            try {
-                form.reset();
-                console.log('✅ Form reset');
-            } catch (e) {
-                console.error('❌ Form reset error:', e);
+        modal.classList.add('closing');
+        modal.hidden = true;
+        modal.style.display = 'none';
+        setTimeout(() => {
+            modal.classList.remove('show', 'closing');
+            const form = document.getElementById('customerForm');
+            if (form) form.reset();
+            const customerIdEl = document.getElementById('customerId');
+            if (customerIdEl) customerIdEl.value = '';
+            const saveBtn = document.getElementById('saveBtn');
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Customer';
             }
-        }
-        
-        const customerIdEl = document.getElementById('customerId');
-        if (customerIdEl) {
-            customerIdEl.value = '';
-        }
-        
-        // Re-enable save button
-        const saveBtn = document.getElementById('saveBtn');
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Customer';
-            console.log('✅ Save button reset');
-        }
-        
-        // Remove body scroll lock if any
-        document.body.style.overflow = '';
-        
-        console.log('✅✅✅ CLOSE COMPLETED! ✅✅✅');
-        
+            document.body.style.overflow = '';
+        }, 200);
     } catch (error) {
-        console.error('❌❌❌ CRITICAL ERROR in closeModal:', error);
-        console.error('Error stack:', error.stack);
+        console.error(error);
     }
 }
 
@@ -938,6 +917,8 @@ function animateValue(id, target) {
 // INITIALIZATION
 // ============================================================================
 document.addEventListener('DOMContentLoaded', function() {
+    if (window.__customersModalInit) return;
+    window.__customersModalInit = true;
     console.log('✅ DOM Ready - Initializing...');
     
     // Load data

@@ -42,7 +42,7 @@ class ProductImageUpload {
         
         // Action buttons
         this.replaceBtn?.addEventListener('click', () => this.imageInput.click());
-        this.deleteBtn?.addEventListener('click', () => this.deleteImage());
+        this.deleteBtn?.addEventListener('click', () => this.deleteImage(true, true));
         this.zoomBtn?.addEventListener('click', () => this.zoomImage());
         
         console.log('✅ Product Image Upload initialized');
@@ -155,9 +155,11 @@ class ProductImageUpload {
         document.getElementById('imageFileSize').textContent = sizeText;
     }
     
-    deleteImage() {
-        if (!confirm('Remove this image?')) {
-            return;
+    deleteImage(silent = false, notify = true) {
+        if (!silent) {
+            if (!confirm('Remove this image?')) {
+                return;
+            }
         }
         
         // Clear selected file
@@ -169,7 +171,7 @@ class ProductImageUpload {
         this.previewArea.style.display = 'none';
         this.dropZone.style.display = 'block';
         
-        if (window.app) {
+        if (notify && window.app) {
             app.showToast('Image removed', 'info');
         }
     }

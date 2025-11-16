@@ -96,8 +96,8 @@ class Payment extends BaseModel {
         // Load bank account settings from DB (if available)
         $bankAccounts = [
             'bca' => [ 'name' => 'Your Business Name', 'account' => '1234567890', 'bank_name' => 'Bank Central Asia (BCA)' ],
-            'mandiri' => [ 'name' => 'Your Business Name', 'account' => '1234567890', 'bank_name' => 'Bank Mandiri' ],
-            'bni' => [ 'name' => 'Your Business Name', 'account' => '1234567890', 'bank_name' => 'Bank Negara Indonesia (BNI)' ]
+            'bri' => [ 'name' => 'Your Business Name', 'account' => '1234567890', 'bank_name' => 'Bank Rakyat Indonesia (BRI)' ],
+            'blu_bca' => [ 'name' => 'Your Business Name', 'account' => '1234567890', 'bank_name' => 'BLU BCA' ]
         ];
 
         try {
@@ -106,7 +106,9 @@ class Payment extends BaseModel {
             if ($result && $result->rowCount() > 0) {
                 // Kolom pada tabel settings adalah `key` dan `value` (kata kunci MySQL), gunakan backtick
                 $sql = "SELECT `key`, `value` FROM settings WHERE `key` IN (
-                    'bank_default','bank_bca_name','bank_bca_account','bank_mandiri_name','bank_mandiri_account','bank_bni_name','bank_bni_account'
+                    'bank_default','bank_bca_name','bank_bca_account',
+                    'bank_bri_name','bank_bri_account','bank_blu_bca_name','bank_blu_bca_account',
+                    'bank_mandiri_name','bank_mandiri_account','bank_bni_name','bank_bni_account'
                 )";
                 $stmt = $this->pdo->query($sql);
                 $settings = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -116,14 +118,17 @@ class Payment extends BaseModel {
                 // Override bank accounts with settings
                 if (!empty($map['bank_bca_name'])) $bankAccounts['bca']['name'] = $map['bank_bca_name'];
                 if (!empty($map['bank_bca_account'])) $bankAccounts['bca']['account'] = $map['bank_bca_account'];
-                if (!empty($map['bank_mandiri_name'])) $bankAccounts['mandiri']['name'] = $map['bank_mandiri_name'];
-                if (!empty($map['bank_mandiri_account'])) $bankAccounts['mandiri']['account'] = $map['bank_mandiri_account'];
-                if (!empty($map['bank_bni_name'])) $bankAccounts['bni']['name'] = $map['bank_bni_name'];
-                if (!empty($map['bank_bni_account'])) $bankAccounts['bni']['account'] = $map['bank_bni_account'];
+                // Prefer new keys, fallback to old
+                $bankAccounts['bri']['name'] = $map['bank_bri_name'] ?? $map['bank_mandiri_name'] ?? $bankAccounts['bri']['name'];
+                $bankAccounts['bri']['account'] = $map['bank_bri_account'] ?? $map['bank_mandiri_account'] ?? $bankAccounts['bri']['account'];
+                $bankAccounts['blu_bca']['name'] = $map['bank_blu_bca_name'] ?? $map['bank_bni_name'] ?? $bankAccounts['blu_bca']['name'];
+                $bankAccounts['blu_bca']['account'] = $map['bank_blu_bca_account'] ?? $map['bank_bni_account'] ?? $bankAccounts['blu_bca']['account'];
 
                 // If bank is empty or 'default', use default from settings
                 if (!$bank || strtolower($bank) === 'default') {
                     $bank = $map['bank_default'] ?? 'bca';
+                    if ($bank === 'mandiri') $bank = 'bri';
+                    if ($bank === 'bni') $bank = 'blu_bca';
                 }
 
                 // Read toggle to use virtual account (default disabled unless explicitly enabled)

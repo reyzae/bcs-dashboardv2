@@ -16,6 +16,7 @@ requireRole(['admin', 'manager', 'staff']);
 
 // Page configuration
 $page_title = 'Products Management';
+$header_compact = true; // compact header: title aligns with icons
 $hide_welcome_banner = true; // Hide default welcome banner
 $additional_css = [];
 $additional_js = ['products.js'];
@@ -28,22 +29,34 @@ require_once 'includes/header.php';
 ?>
 
 <!-- Products Management Content -->
-<div class="page-header" style="margin-bottom: 2rem;">
-    <h1 style="font-size: 1.75rem; font-weight: 700; color: #1f2937; margin: 0;">
-        <i class="fas fa-box"></i> Products Management
-    </h1>
-    <p style="color: #6b7280; margin-top: 0.5rem;">
-        Manage your inventory, pricing, and stock levels
-    </p>
+<div class="card mb-6">
+    <div class="card-header flex-between">
+        <h3 class="card-title">
+            <i class="fas fa-box"></i> Products Management
+        </h3>
+        <div class="header-actions" style="display:flex; align-items:center; gap:0.5rem;">
+            <button class="btn btn-secondary btn-sm" id="refreshBtn" title="Refresh (F5)">
+                <i class="fas fa-sync"></i>
+                Refresh
+            </button>
+            <button class="btn btn-primary btn-sm" id="addProductBtn">
+                <i class="fas fa-plus"></i>
+                <span>Add Product</span>
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <p class="text-muted">Manage your inventory, pricing, and stock levels</p>
+    </div>
 </div>
 
 <!-- Add Product Card (Inline Form) -->
 <div class="card" id="addProductCard" style="margin-bottom: 2rem;">
-    <div class="card-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem;">
-        <h3 style="margin: 0; font-size: 1.5rem; font-weight: 700; color: white;">
+    <div class="card-header flex-between">
+        <h3 class="card-title">
             <i class="fas fa-plus-circle"></i> Add Product
         </h3>
-        <button class="btn btn-light btn-sm" id="closeInlineFormBtn" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white;">
+        <button class="btn btn-secondary btn-sm" id="closeInlineFormBtn" title="Close">
             <i class="fas fa-times"></i>
         </button>
     </div>
@@ -55,24 +68,24 @@ require_once 'includes/header.php';
                     <!-- Basic Information Section -->
                     <div style="margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 2px solid #f3f4f6;">
                         <h4 style="margin: 0 0 1.25rem 0; font-size: 1.125rem; font-weight: 600; color: #374151;">
-                            <i class="fas fa-info-circle" style="color: #667eea;"></i> Basic Information
+                            <i class="fas fa-info-circle" style="color: var(--primary-color);"></i> Basic Information
                         </h4>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                             <div class="form-group">
                                 <label for="productName" class="form-label" style="font-size: 0.875rem; font-weight: 500;">
-                                    <i class="fas fa-tag" style="color: #667eea;"></i> Product Name <span style="color: #ef4444; font-weight: 700;">*</span>
+                                    <i class="fas fa-tag" style="color: var(--primary-color);"></i> Product Name <span style="color: #ef4444; font-weight: 700;">*</span>
                                 </label>
                                 <input type="text" id="productName" class="form-input" placeholder="Enter product name" required>
                             </div>
                             <div class="form-group">
                                 <label for="productSku" class="form-label" style="font-size: 0.875rem; font-weight: 500;">
-                                    <i class="fas fa-barcode" style="color: #667eea;"></i> SKU <span style="color: #ef4444; font-weight: 700;">*</span>
+                                    <i class="fas fa-barcode" style="color: var(--primary-color);"></i> SKU <span style="color: #ef4444; font-weight: 700;">*</span>
                                 </label>
                                 <input type="text" id="productSku" class="form-input" placeholder="e.g., PRD-001" required>
                             </div>
                             <div class="form-group">
                                 <label for="productCategory" class="form-label" style="font-size: 0.875rem; font-weight: 500;">
-                                    <i class="fas fa-folder" style="color: #667eea;"></i> Category <span style="color: #ef4444; font-weight: 700;">*</span>
+                                    <i class="fas fa-folder" style="color: var(--primary-color);"></i> Category <span style="color: #ef4444; font-weight: 700;">*</span>
                                 </label>
                                 <select id="productCategory" class="form-select" required>
                                     <option value="">Select category...</option>
@@ -80,13 +93,13 @@ require_once 'includes/header.php';
                             </div>
                             <div class="form-group">
                                 <label for="productBarcode" class="form-label" style="font-size: 0.875rem; font-weight: 500;">
-                                    <i class="fas fa-qrcode" style="color: #667eea;"></i> Barcode
+                                    <i class="fas fa-qrcode" style="color: var(--primary-color);"></i> Barcode
                                 </label>
                                 <input type="text" id="productBarcode" class="form-input" placeholder="Optional barcode">
                             </div>
                             <div class="form-group" style="grid-column: 1 / -1;">
                                 <label for="productDescription" class="form-label" style="font-size: 0.875rem; font-weight: 500;">
-                                    <i class="fas fa-align-left" style="color: #667eea;"></i> Description
+                                    <i class="fas fa-align-left" style="color: var(--primary-color);"></i> Description
                                 </label>
                                 <textarea id="productDescription" class="form-input" rows="2" placeholder="Product description (optional)" style="resize: vertical;"></textarea>
                             </div>
@@ -141,7 +154,7 @@ require_once 'includes/header.php';
                         </div>
                         <div class="form-group" style="margin-top: 1.25rem;">
                             <label style="font-size: 0.875rem; font-weight: 500; color: #374151; margin-bottom: 0.5rem; display: block;">
-                                <i class="fas fa-power-off" style="color: #667eea;"></i> Product Status
+                                <i class="fas fa-power-off" style="color: var(--primary-color);"></i> Product Status
                             </label>
                             <div class="modern-toggle-container" style="background: #f9fafb; padding: 1rem; border-radius: 12px; border: 2px solid #e5e7eb;">
                                 <label class="modern-toggle-switch" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;">
@@ -176,7 +189,7 @@ require_once 'includes/header.php';
 
                     <!-- Form Actions -->
                     <div style="display: flex; gap: 0.75rem; margin-top: 2rem; padding-top: 1.5rem; border-top: 2px solid #f3f4f6;">
-                        <button type="submit" class="btn btn-primary" style="flex: 1; padding: 0.875rem; font-weight: 600; font-size: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;">
+                        <button type="submit" class="btn btn-primary" style="flex: 1; padding: 0.875rem; font-weight: 600; font-size: 1rem; background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%); border: none;">
                             <i class="fas fa-save"></i> Save Product
                         </button>
                         <button type="button" id="resetFormBtn" class="btn btn-secondary" style="padding: 0.875rem 1.5rem; font-weight: 600;">
@@ -191,7 +204,7 @@ require_once 'includes/header.php';
                 <!-- Product Image Upload Section -->
                 <div style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem;">
                     <h4 style="margin: 0 0 1rem 0; font-size: 1rem; font-weight: 700; color: #374151; display: flex; align-items: center; gap: 0.5rem;">
-                        <i class="fas fa-image" style="color: #667eea;"></i> Product Image
+                        <i class="fas fa-image" style="color: var(--primary-color);"></i> Product Image
                     </h4>
                     
                     <!-- Image Upload Area -->
@@ -325,16 +338,6 @@ require_once 'includes/header.php';
             <h3 class="card-title">
                 <i class="fas fa-filter"></i> Filter Products
             </h3>
-        <div style="display: flex; gap: 0.75rem;">
-            <button class="btn btn-secondary" id="refreshBtn" title="Refresh (F5)">
-                <i class="fas fa-sync"></i>
-                Refresh
-            </button>
-            <button class="btn btn-primary" id="addProductBtn">
-                <i class="fas fa-plus"></i>
-                <span>Add Product</span>
-            </button>
-        </div>
         </div>
         <div class="card-body">
         <div class="form-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
@@ -362,11 +365,11 @@ require_once 'includes/header.php';
 
     <!-- Products Table -->
     <div class="card">
-        <div class="card-header">
+        <div class="card-header flex-between">
             <h3 class="card-title">
             <i class="fas fa-list"></i> Products List
             </h3>
-        <span class="badge" style="background: #667eea; color: white; padding: 0.5rem 1rem; border-radius: 20px; font-size: 0.875rem;">
+        <span class="badge badge-primary badge-lg">
             <i class="fas fa-box"></i> <span id="totalProductsCount">0</span> Products
         </span>
         </div>

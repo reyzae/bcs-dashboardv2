@@ -12,6 +12,7 @@ class PermissionMiddleware {
     const ROLE_ADMIN = 'admin';
     const ROLE_MANAGER = 'manager';
     const ROLE_CASHIER = 'cashier';
+    const ROLE_STAFF = 'staff';
     
     /**
      * Permission definitions for each role
@@ -41,6 +42,12 @@ class PermissionMiddleware {
             'customers.view',
             'products.view',
             'transactions.view', 'transactions.create'
+        ],
+        'staff' => [
+            'pos.access',
+            'customers.view',
+            'products.view',
+            'transactions.view'
         ]
     ];
     
@@ -209,6 +216,14 @@ class PermissionMiddleware {
         }
         
         return isset($_SESSION['user_role']) && $_SESSION['user_role'] === self::ROLE_CASHIER;
+    }
+
+    public static function isStaff() {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        
+        return isset($_SESSION['user_role']) && $_SESSION['user_role'] === self::ROLE_STAFF;
     }
     
     /**

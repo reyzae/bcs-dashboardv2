@@ -34,9 +34,9 @@ class OrderController extends BaseController {
         }
         
         $data = $this->getRequestData();
+        // Align validation with UI: email & address are optional
         $this->validateRequired($data, [
-            'customer_name', 'customer_email', 'customer_phone', 
-            'customer_address', 'items', 'payment_method'
+            'customer_name', 'customer_phone', 'items', 'payment_method'
         ]);
         
         // Validate items
@@ -50,8 +50,8 @@ class OrderController extends BaseController {
             $this->sendError('Invalid payment method', 400);
         }
         
-        // Validate email format
-        if (!filter_var($data['customer_email'], FILTER_VALIDATE_EMAIL)) {
+        // Validate email format only when provided
+        if (!empty($data['customer_email']) && !filter_var($data['customer_email'], FILTER_VALIDATE_EMAIL)) {
             $this->sendError('Invalid email address', 400);
         }
         
@@ -92,9 +92,9 @@ class OrderController extends BaseController {
         // Prepare order data
         $orderData = [
             'customer_name' => $this->sanitizeInput($data['customer_name']),
-            'customer_email' => $this->sanitizeInput($data['customer_email']),
+            'customer_email' => $this->sanitizeInput($data['customer_email'] ?? ''),
             'customer_phone' => $this->sanitizeInput($data['customer_phone']),
-            'customer_address' => $this->sanitizeInput($data['customer_address']),
+            'customer_address' => $this->sanitizeInput($data['customer_address'] ?? ''),
             'subtotal' => $subtotal,
             'discount_amount' => 0,
             'tax_amount' => $taxAmount,
@@ -113,6 +113,33 @@ class OrderController extends BaseController {
             if ($orderId) {
                 // Get order details
                 $order = $this->orderModel->findWithItems($orderId);
+
+                if (is_array($validatedItems) && !empty($validatedItems)) {
+                    try {
+                        foreach ($validatedItems as $item) {
+                            $productId = (int)$item['product_id'];
+                            $qty = (int)$item['quantity'];
+                            if ($productId > 0 && $qty > 0) {
+                                $stmt = $this->pdo->prepare("UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?");
+                                $stmt->execute([$qty, $productId]);
+
+                                $mv = $this->pdo->prepare(
+                                    "INSERT INTO stock_movements (product_id, movement_type, quantity, reference_type, reference_id, user_id, notes) 
+                                     VALUES (?, 'out', ?, 'order', ?, NULL, ?)"
+                                );
+                                $mv->execute([
+                                    $productId,
+                                    abs($qty),
+                                    (int)$orderId,
+                                    'Shop order ' . ($order['order_number'] ?? $orderId)
+                                ]);
+                            }
+                        }
+                    } catch (Exception $e) {
+                        error_log('Stock reservation failed for order ' . ($order['order_number'] ?? $orderId) . ': ' . $e->getMessage());
+                        // Continue flow: payment and order creation should not fail
+                    }
+                }
                 
                 // Create payment record
                 $paymentData = [
@@ -214,6 +241,35 @@ class OrderController extends BaseController {
         
         $this->sendSuccess($order);
     }
+
+    /**
+     * Get order by order number ONLY (PUBLIC)
+     * For scenarios where email verification is not required.
+     */
+    public function getByNumber() {
+        $orderNumber = $_GET['order_number'] ?? '';
+
+        if (empty($orderNumber)) {
+            $this->sendError('Order number is required', 400);
+        }
+
+        $order = $this->orderModel->findByOrderNumber($orderNumber);
+
+        if (!$order) {
+            $this->sendError('Order not found', 404);
+        }
+
+        // Attach order items
+        $order['items'] = $this->orderModel->getItems($order['id']);
+
+        // Attach payment info if exists
+        $payment = $this->paymentModel->findByOrderId($order['id']);
+        if ($payment) {
+            $order['payment'] = $payment;
+        }
+
+        $this->sendSuccess($order);
+    }
     
     /**
      * Get orders by email (PUBLIC)
@@ -270,6 +326,7 @@ class OrderController extends BaseController {
      */
     public function list() {
         $this->checkAuthentication();
+        $this->requireAdmin();
         
         $page = intval($_GET['page'] ?? 1);
         $limit = intval($_GET['limit'] ?? 20);
@@ -277,15 +334,35 @@ class OrderController extends BaseController {
         $paymentStatus = $_GET['payment_status'] ?? null;
         $offset = ($page - 1) * $limit;
         
-        $conditions = [];
+        $where = [];
+        $params = [];
         if ($status) {
-            $conditions['order_status'] = $status;
+            $where[] = "o.order_status = ?";
+            $params[] = $status;
         }
         if ($paymentStatus) {
-            $conditions['payment_status'] = $paymentStatus;
+            $where[] = "o.payment_status = ?";
+            $params[] = $paymentStatus;
         }
-        
-        $orders = $this->orderModel->findAll($conditions, 'created_at DESC', $limit, $offset);
+        $whereSql = count($where) ? (" WHERE " . implode(" AND ", $where)) : "";
+
+        // Query with items_count aggregated
+        $sql = "SELECT o.*, COALESCE(SUM(oi.quantity), 0) AS items_count
+                FROM orders o
+                LEFT JOIN order_items oi ON oi.order_id = o.id
+                $whereSql
+                GROUP BY o.id
+                ORDER BY o.created_at DESC
+                LIMIT {$limit} OFFSET {$offset}";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        $orders = $stmt->fetchAll();
+
+        // Total count without pagination (using BaseModel count for consistency)
+        $conditions = [];
+        if ($status) { $conditions['order_status'] = $status; }
+        if ($paymentStatus) { $conditions['payment_status'] = $paymentStatus; }
         $total = $this->orderModel->count($conditions);
         
         $this->sendSuccess([
@@ -331,6 +408,16 @@ class OrderController extends BaseController {
         $success = $this->orderModel->updateOrderStatus($orderId, $data['status']);
         
         if ($success) {
+            if ($data['status'] === 'cancelled') {
+                $this->restoreStockForOrder($orderId, $order['order_number']);
+                // Optional: mark payment as cancelled if exists
+                try {
+                    $payment = $this->paymentModel->findByOrderId($orderId);
+                    if ($payment) {
+                        $this->paymentModel->updateStatus($payment['id'], 'cancelled', $payment['transaction_id']);
+                    }
+                } catch (Exception $e) { /* ignore */ }
+            }
             // Send notification about status change
             $this->notificationModel->notifyOrderStatusChange(
                 $orderId,
@@ -348,12 +435,83 @@ class OrderController extends BaseController {
             $this->sendError('Failed to update order status', 500);
         }
     }
+
+    /**
+     * Cancel order (PUBLIC)
+     * Allows buyer to cancel pending orders; restores stock.
+     */
+    public function cancel() {
+        if ($this->getMethod() !== 'POST') {
+            $this->sendError('Method not allowed', 405);
+        }
+        $data = $this->getRequestData();
+        $this->validateRequired($data, ['order_number']);
+
+        $order = $this->orderModel->findByOrderNumber($data['order_number']);
+        if (!$order) { $this->sendError('Order not found', 404); }
+
+        // Only allow cancel if not completed
+        $blockedStatuses = ['completed'];
+        if (in_array(strtolower($order['order_status']), $blockedStatuses, true)) {
+            $this->sendError('Order cannot be cancelled', 400);
+        }
+
+        // Update order status to cancelled
+        $ok = $this->orderModel->updateOrderStatus($order['id'], 'cancelled');
+        if (!$ok) { $this->sendError('Failed to cancel order', 500); }
+
+        // Restore stock
+        $this->restoreStockForOrder($order['id'], $order['order_number']);
+
+        // Update payment status if exists
+        try {
+            $payment = $this->paymentModel->findByOrderId($order['id']);
+            if ($payment && strtolower($payment['status']) !== 'success') {
+                $this->paymentModel->updateStatus($payment['id'], 'cancelled', $payment['transaction_id']);
+            }
+        } catch (Exception $e) { /* ignore */ }
+
+        $order['order_status'] = 'cancelled';
+        $this->sendSuccess(['order_number' => $order['order_number'], 'order_status' => 'cancelled']);
+    }
+
+    /**
+     * Restore stock for cancelled order
+     */
+    private function restoreStockForOrder($orderId, $orderNumber = null) {
+        try {
+            // Skip if already restored
+            $check = $this->pdo->prepare("SELECT COUNT(*) AS c FROM stock_movements WHERE reference_type = 'order_cancel' AND reference_id = ?");
+            $check->execute([$orderId]);
+            $exists = (int)($check->fetch()['c'] ?? 0);
+            if ($exists > 0) return;
+
+            $items = $this->orderModel->getItems($orderId);
+            foreach ($items as $it) {
+                $pid = (int)$it['product_id'];
+                $qty = (int)$it['quantity'];
+                if ($pid > 0 && $qty > 0) {
+                    $up = $this->pdo->prepare("UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?");
+                    $up->execute([$qty, $pid]);
+
+                    $ins = $this->pdo->prepare(
+                        "INSERT INTO stock_movements (product_id, movement_type, quantity, reference_type, reference_id, user_id, notes)
+                         VALUES (?, 'in', ?, 'order_cancel', ?, NULL, ?)"
+                    );
+                    $ins->execute([$pid, $qty, $orderId, 'Order cancelled ' . ($orderNumber ?? $orderId)]);
+                }
+            }
+        } catch (Exception $e) {
+            error_log('Restore stock failed for order ' . ($orderNumber ?? $orderId) . ': ' . $e->getMessage());
+        }
+    }
     
     /**
      * Get order statistics (ADMIN ONLY)
      */
     public function getStats() {
         $this->checkAuthentication();
+        $this->requireAdmin();
         
         $startDate = $_GET['start_date'] ?? null;
         $endDate = $_GET['end_date'] ?? null;
@@ -375,6 +533,9 @@ switch ($action) {
     case 'get':
         $orderController->get();
         break;
+    case 'get-by-number':
+        $orderController->getByNumber();
+        break;
     case 'get-by-email':
         $orderController->getByEmail();
         break;
@@ -386,6 +547,9 @@ switch ($action) {
         break;
     case 'update-status':
         $orderController->updateStatus();
+        break;
+    case 'cancel':
+        $orderController->cancel();
         break;
     case 'stats':
         $orderController->getStats();

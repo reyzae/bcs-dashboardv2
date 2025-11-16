@@ -51,9 +51,13 @@ DB_NAME=bytebalok_dashboard
 DB_USER=root
 DB_PASS=              # Kosongkan jika tidak ada password
 
-# 6. Start server
+# 6. Start server (PHP built-in)
 cd public
 php -S localhost:3000
+
+# 6b. If using a different port/origin during development
+# CORS now reflects the request origin to allow credentials,
+# so ensure you access via the same origin as the dashboard pages.
 ```
 
 ### **3. Access Dashboard**
@@ -61,6 +65,9 @@ php -S localhost:3000
 URL: http://localhost:3000/login.php
 Username: admin
 Password: password
+
+> Tip: Centang “Remember me” saat login untuk sesi yang bertahan.
+> Durasi default 30 hari, dapat diubah lewat `REMEMBER_DURATION_DAYS` pada `config.env`.
 ```
 
 ### **4. First Steps**
@@ -197,6 +204,11 @@ Username: admin
 Password: password
 
 If still error, check: docs/troubleshooting/COMMON_ISSUES.md
+
+### **Cross-origin requests blocked?**
+Pastikan origin (protocol+host+port) konsisten antara halaman dashboard dan panggilan API.
+Di development, API akan meng-echo `Origin` untuk mengizinkan cookie/sesi.
+Di production, origin dibatasi ke `APP_URL`.
 ```
 
 ### **Products tidak muncul?**

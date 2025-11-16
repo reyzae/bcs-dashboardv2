@@ -38,15 +38,15 @@ class PaymentGatewayService {
                     'account' => $_ENV['BANK_BCA_ACCOUNT'] ?? '1234567890',
                     'bank_name' => 'Bank Central Asia (BCA)'
                 ],
-                'mandiri' => [
+                'bri' => [
                     'name' => $_ENV['BANK_MANDIRI_NAME'] ?? 'Your Business Name',
                     'account' => $_ENV['BANK_MANDIRI_ACCOUNT'] ?? '1234567890',
-                    'bank_name' => 'Bank Mandiri'
+                    'bank_name' => 'Bank Rakyat Indonesia (BRI)'
                 ],
-                'bni' => [
+                'blu_bca' => [
                     'name' => $_ENV['BANK_BNI_NAME'] ?? 'Your Business Name',
                     'account' => $_ENV['BANK_BNI_ACCOUNT'] ?? '1234567890',
-                    'bank_name' => 'Bank Negara Indonesia (BNI)'
+                    'bank_name' => 'BLU BCA'
                 ]
             ]
         ];
@@ -259,7 +259,7 @@ class PaymentGatewayService {
      * 
      * @param string $orderId Order/Transaction ID
      * @param float $amount Payment amount
-     * @param string $bank Preferred bank (bca, mandiri, bni, etc.)
+     * @param string $bank Preferred bank (bca, bri, blu_bca)
      * @return array Bank transfer information
      */
     public function createBankTransfer($orderId, $amount, $bank = 'bca') {
@@ -310,9 +310,8 @@ class PaymentGatewayService {
         // Format: Bank Code (3 digits) + Order ID (last 8 digits) + Check Digit (1 digit)
         $bankCodes = [
             'bca' => '014',
-            'mandiri' => '008',
-            'bni' => '009',
-            'bri' => '002'
+            'bri' => '002',
+            'blu_bca' => '501'
         ];
         
         $bankCode = $bankCodes[strtolower($bank)] ?? '014';

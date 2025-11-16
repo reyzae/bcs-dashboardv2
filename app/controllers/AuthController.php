@@ -29,6 +29,7 @@ class AuthController extends BaseController {
         
         $username = $this->sanitizeInput($data['username']);
         $password = $data['password'];
+        $remember = isset($data['remember']) && in_array($data['remember'], ['1', 1, true, 'true', 'on'], true);
         
         $user = $this->userModel->login($username, $password);
         
@@ -48,6 +49,11 @@ class AuthController extends BaseController {
             // Initialize session activity timestamp
             $_SESSION['last_activity'] = time();
             
+            // Handle Remember Me: issue persistent token cookie
+            if ($remember) {
+                $this->issueRememberMeToken($user['id']);
+            }
+            
             $this->logAction('login', 'users', $user['id']);
             $this->sendSuccess($user, 'Login successful');
         } else {
@@ -66,9 +72,74 @@ class AuthController extends BaseController {
         if (isset($_SESSION['user_id'])) {
             $this->logAction('logout', 'users', $_SESSION['user_id']);
         }
-        
+        // Clear remember-me cookie and token file if present
+        $this->clearRememberMeToken();
+
         session_destroy();
         $this->sendSuccess(null, 'Logout successful');
+    }
+
+    /**
+     * Issue a persistent remember-me token and set secure cookie
+     */
+    private function issueRememberMeToken($userId) {
+        try {
+            $token = bin2hex(random_bytes(32));
+        } catch (Exception $e) {
+            // Fallback to less secure random if random_bytes unavailable
+            $token = bin2hex(openssl_random_pseudo_bytes(32));
+        }
+        $days = isset($_ENV['REMEMBER_DURATION_DAYS']) && is_numeric($_ENV['REMEMBER_DURATION_DAYS'])
+            ? max(1, intval($_ENV['REMEMBER_DURATION_DAYS']))
+            : 30;
+        $expiry = time() + ($days * 86400);
+
+        // Persist mapping to disk (outside public directory)
+        $baseDir = dirname(__DIR__, 2) . '/storage/sessions/remember_tokens';
+        if (!is_dir($baseDir)) {
+            @mkdir($baseDir, 0775, true);
+        }
+        $payload = [
+            'user_id' => $userId,
+            'expiry' => $expiry
+        ];
+        @file_put_contents($baseDir . '/' . $token . '.json', json_encode($payload));
+
+        // Set cookie flags
+        $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (isset($_ENV['APP_URL']) && stripos($_ENV['APP_URL'], 'https://') === 0);
+        $cookieOptions = [
+            'expires' => $expiry,
+            'path' => '/',
+            'secure' => $isHttps,
+            'httponly' => true,
+            'samesite' => 'Lax'
+        ];
+        setcookie('remember_me', $token, $cookieOptions);
+    }
+
+    /**
+     * Clear remember-me cookie and token file
+     */
+    private function clearRememberMeToken() {
+        $token = $_COOKIE['remember_me'] ?? null;
+        if ($token) {
+            $baseDir = dirname(__DIR__, 2) . '/storage/sessions/remember_tokens';
+            $file = $baseDir . '/' . basename($token) . '.json';
+            if (is_file($file)) {
+                @unlink($file);
+            }
+        }
+        // Expire cookie
+        $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (isset($_ENV['APP_URL']) && stripos($_ENV['APP_URL'], 'https://') === 0);
+        setcookie('remember_me', '', [
+            'expires' => time() - 3600,
+            'path' => '/',
+            'secure' => $isHttps,
+            'httponly' => true,
+            'samesite' => 'Lax'
+        ]);
     }
     
     /**
@@ -170,12 +241,7 @@ class AuthController extends BaseController {
      * Check if current user is admin
      */
     protected function requireAdmin() {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-        if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
-            $this->sendError('Unauthorized. Admin access required.', 403);
-        }
+        parent::requireAdmin();
     }
     
     /**

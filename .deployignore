@@ -12,6 +12,7 @@ storage/backups/
 # Database dump atau file sensitif
 database.sql
 *.sql
+!database_migrations/release-setup-wiracent_balok.sql
 *.sql.gz
 
 # Repo metadata dan dokumentasi (opsional untuk hosting)

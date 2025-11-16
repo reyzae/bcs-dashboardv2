@@ -23,54 +23,60 @@ $additional_js = ['orders.js'];
 // Current user
 $current_user = getCurrentUser();
 
+// Aktifkan compact header untuk tampilan header yang rapi
+$header_compact = true;
+
 // Include header
 require_once __DIR__ . '/includes/header.php';
 ?>
 
 <!-- Orders Management Content -->
-<div class="page-header" style="margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between;">
-    <div>
-        <h1 style="font-size: 1.75rem; font-weight: 700; color: #1f2937; margin: 0;">
-            <i class="fas fa-receipt"></i> Incoming Orders
-        </h1>
-        <p style="color: #6b7280; margin-top: 0.5rem;">Pantau pesanan masuk dan ubah status dengan cepat</p>
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-header" style="display: flex; align-items: center; justify-content: space-between;">
+        <h3 class="card-title"><i class="fas fa-receipt" style="color: var(--primary-color);"></i> Incoming Orders</h3>
+        <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-secondary btn-sm" id="refreshOrdersBtn"><i class="fas fa-sync"></i> Refresh</button>
+        </div>
     </div>
-    <div style="display: flex; gap: 0.5rem;">
-        <button class="btn btn-secondary" id="refreshOrdersBtn"><i class="fas fa-sync"></i> Refresh</button>
+    <div class="card-body">
+        <p class="text-muted" style="margin:0;">Pantau pesanan masuk dan ubah status dengan cepat</p>
     </div>
-    </div>
+</div>
 
 <!-- Status Tabs -->
 <div class="card" style="margin-bottom: 1rem;">
     <div class="card-body" style="padding: 0.75rem 1rem;">
-        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-            <button class="btn btn-light" data-status="pending" id="tabPending">
-                <i class="fas fa-clock"></i> Waiting
+        <div class="status-tabs">
+            <button class="status-tab-btn active" data-status="pending" id="tabPending">
+                <i class="fas fa-clock"></i>
+                <span>Waiting</span>
                 <span class="badge" id="countPending" style="margin-left: 6px;">0</span>
             </button>
-            <button class="btn btn-light" data-status="processing" id="tabProcessing">
-                <i class="fas fa-cog"></i> In Progress
+            <button class="status-tab-btn" data-status="processing" id="tabProcessing">
+                <i class="fas fa-cog"></i>
+                <span>In Progress</span>
                 <span class="badge" id="countProcessing" style="margin-left: 6px;">0</span>
             </button>
-            <button class="btn btn-light" data-status="completed" id="tabCompleted">
-                <i class="fas fa-check-circle"></i> Completed
+            <button class="status-tab-btn" data-status="completed" id="tabCompleted">
+                <i class="fas fa-check-circle"></i>
+                <span>Completed</span>
                 <span class="badge" id="countCompleted" style="margin-left: 6px;">0</span>
             </button>
         </div>
     </div>
- </div>
+</div>
 
 <!-- Orders Table -->
 <div class="card">
     <div class="card-header" style="display: flex; align-items: center; justify-content: space-between;">
-        <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #374151;">Daftar Pesanan</h3>
+        <h3 class="card-title">Daftar Pesanan</h3>
         <div style="display: flex; gap: 0.5rem; align-items: center;">
             <span id="activeStatusLabel" class="badge">pending</span>
         </div>
     </div>
-    <div class="card-body" style="padding: 0;">
+    <div class="card-body no-padding">
         <div class="table-responsive">
-            <table class="table" id="ordersTable">
+            <table class="table table--wide" id="ordersTable">
                 <thead>
                     <tr>
                         <th>Order #</th>
@@ -80,7 +86,7 @@ require_once __DIR__ . '/includes/header.php';
                         <th>Payment</th>
                         <th>Status</th>
                         <th>Placed</th>
-                        <th style="width: 220px;">Actions</th>
+                        <th class="col-actions">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="ordersTableBody">

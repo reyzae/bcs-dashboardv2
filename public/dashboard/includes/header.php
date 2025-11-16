@@ -10,6 +10,12 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 require_once __DIR__ . '/../../../app/helpers/functions.php';
+// Ensure CSRF token is available in session for AJAX requests
+// SecurityMiddleware provides token generation; include if not already loaded
+if (empty($_SESSION['csrf_token'])) {
+    require_once __DIR__ . '/../../../app/helpers/SecurityMiddleware.php';
+    $_SESSION['csrf_token'] = SecurityMiddleware::generateCsrfToken();
+}
 
 $current_user = getCurrentUser();
 $user_initials = getAvatarInitials($current_user['full_name']);
@@ -23,6 +29,10 @@ $dashboard_title = getDashboardTitle();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $dashboard_title; ?> - Bytebalok</title>
+    <!-- CSRF token for AJAX requests -->
+    <meta name="csrf-token" content="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
+    <!-- Brand theme color for mobile UI -->
+    <meta name="theme-color" content="#4f46e5">
     
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -33,6 +43,7 @@ $dashboard_title = getDashboardTitle();
     <!-- Stylesheets -->
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="../assets/css/responsive.css">
+    <link rel="stylesheet" href="../assets/css/accessibility.css">
     <?php if (isset($additional_css)): foreach ($additional_css as $css): ?>
     <link rel="stylesheet" href="../assets/css/<?php echo $css; ?>">
     <?php endforeach; endif; ?>
@@ -60,6 +71,24 @@ $dashboard_title = getDashboardTitle();
                     default => '#5a6268'
                 };
             ?>;
+        }
+        /* Logo sizing fix */
+        .sidebar-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .sidebar-logo .logo-img {
+            width: 40px;
+            height: 40px;
+            object-fit: contain;
+            display: inline-block;
+        }
+        @media (max-width: 768px) {
+            .sidebar-logo .logo-img {
+                width: 32px;
+                height: 32px;
+            }
         }
         
         .role-indicator {
@@ -98,12 +127,12 @@ $dashboard_title = getDashboardTitle();
         }
         
         .welcome-banner {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
             color: white;
             padding: 20px;
             border-radius: 12px;
             margin-bottom: 24px;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: var(--shadow-lg);
         }
         
         .welcome-banner h2 {
@@ -137,15 +166,15 @@ $dashboard_title = getDashboardTitle();
 
         .user-menu-button:hover {
             background: #f9fafb;
-            border-color: #667eea;
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+            border-color: var(--primary-color);
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
         }
 
         .user-menu-button .user-avatar {
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -205,7 +234,7 @@ $dashboard_title = getDashboardTitle();
             align-items: center;
             gap: 12px;
             padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
             color: white;
         }
 
@@ -288,11 +317,11 @@ $dashboard_title = getDashboardTitle();
 
         .user-menu-item:hover {
             background: #f9fafb;
-            color: #667eea;
+            color: var(--primary-color);
         }
 
         .user-menu-item:hover i {
-            color: #667eea;
+            color: var(--primary-color);
         }
 
         .user-menu-logout {
@@ -321,6 +350,7 @@ $dashboard_title = getDashboardTitle();
     </style>
 </head>
 <body>
+    <a href="#main" class="skip-link">Skip to content</a>
     <div class="dashboard">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
@@ -329,6 +359,10 @@ $dashboard_title = getDashboardTitle();
                     <img src="../assets/img/logo.svg" alt="Bytebalok" class="logo-img">
                     <h1>Bytebalok</h1>
                 </a>
+                <!-- Mobile Close Button -->
+                <button class="sidebar-close" id="sidebarClose" aria-label="Close Sidebar">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
             
             <!-- Role Banner -->
@@ -376,20 +410,26 @@ $dashboard_title = getDashboardTitle();
             
         </aside>
 
+        <!-- Global Sidebar Overlay for mobile/tablet -->
+        <div id="sidebarOverlay" class="sidebar-overlay"></div>
+
         <!-- Main Content -->
         <main class="main-content">
             <!-- Header -->
-            <header class="main-header">
+            <header class="main-header <?php echo (isset($header_compact) && $header_compact) ? 'compact-header' : ''; ?>">
                 <div class="header-left">
-                    <button class="btn btn-icon" id="menuToggle" title="Toggle Menu">
+                    <button class="btn btn-icon" id="menuToggle" title="Toggle Menu" aria-label="Toggle menu">
                         <i class="fas fa-bars"></i>
                     </button>
                     <h1 class="header-title"><?php echo $page_title ?? $dashboard_title; ?></h1>
                 </div>
                 
                 <div class="header-right">
+                    <button class="btn btn-icon header-icon-btn" id="densityToggle" title="Toggle density" aria-label="Toggle density">
+                        <i class="fas fa-compress"></i>
+                    </button>
                     <!-- Notifications -->
-                    <button class="btn btn-icon header-icon-btn" id="notificationsBtn" title="Notifications">
+                    <button class="btn btn-icon header-icon-btn" id="notificationsBtn" title="Notifications" aria-label="Open notifications">
                         <i class="fas fa-bell"></i>
                         <span class="notification-badge" id="notificationCount" style="display: none;">0</span>
                     </button>
@@ -397,7 +437,7 @@ $dashboard_title = getDashboardTitle();
                     <!-- Quick Actions Dropdown (Role-based) -->
                     <?php if ($current_user['role'] === 'admin' || $current_user['role'] === 'manager'): ?>
                     <div class="dropdown">
-                        <button class="btn btn-icon header-icon-btn" id="quickActionsBtn" title="Quick Actions">
+                        <button class="btn btn-icon header-icon-btn" id="quickActionsBtn" title="Quick Actions" aria-label="Open quick actions" aria-haspopup="true" aria-expanded="false">
                             <i class="fas fa-bolt"></i>
                         </button>
                         <div class="dropdown-menu dropdown-menu-right" id="quickActionsMenu">
@@ -422,7 +462,7 @@ $dashboard_title = getDashboardTitle();
                     
                     <!-- User Menu -->
                     <div class="user-menu-wrapper">
-                        <button class="user-menu-button" id="userButton" type="button">
+                        <button class="user-menu-button" id="userButton" type="button" aria-label="Open user menu" aria-haspopup="true" aria-expanded="false">
                             <div class="user-avatar"><?php echo $user_initials; ?></div>
                             <div class="user-info-compact">
                                 <span class="user-name-text"><?php echo $current_user['full_name']; ?></span>

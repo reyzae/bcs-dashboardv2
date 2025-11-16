@@ -420,33 +420,66 @@ class DashboardController extends BaseController {
     public function paymentMethods() {
         try {
             $this->checkAuthentication();
-            
+
+            $period = $_GET['period'] ?? 'today';
+            $from = $_GET['from'] ?? null;
+            $to = $_GET['to'] ?? null;
+
+            $where = "status = 'completed' AND payment_method IN ('cash','qris','transfer')";
+            $params = [];
+
+            if ($period === 'custom' && $from && $to) {
+                $where .= " AND DATE(created_at) BETWEEN ? AND ?";
+                $params[] = $from;
+                $params[] = $to;
+            } elseif (is_numeric($period)) {
+                $where .= " AND created_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)";
+                $params[] = (int)$period;
+            } elseif ($period === 'month') {
+                $where .= " AND DATE(created_at) >= DATE_FORMAT(CURDATE(), '%Y-%m-01')";
+            } elseif ($period === 'year') {
+                $where .= " AND YEAR(created_at) = YEAR(CURDATE())";
+            } else { // today
+                $where .= " AND DATE(created_at) = CURDATE()";
+            }
+
             $sql = "SELECT 
                 payment_method,
                 COUNT(*) as count,
                 COALESCE(SUM(total_amount), 0) as total
             FROM transactions
-            WHERE DATE(created_at) = CURDATE()
-            AND status = 'completed'
+            WHERE $where
             GROUP BY payment_method";
-            
-            $stmt = $this->pdo->query($sql);
+
+            if (!empty($params)) {
+                $stmt = $this->pdo->prepare($sql);
+                $stmt->execute($params);
+            } else {
+                $stmt = $this->pdo->query($sql);
+            }
+
             $methods = $stmt->fetchAll();
-            
-            $data = [
-                'labels' => array_map(function($row) {
-                    return ucfirst($row['payment_method']);
-                }, $methods),
-                'values' => array_map(function($row) {
-                    return (float)$row['total'];
-                }, $methods),
-                'counts' => array_map(function($row) {
-                    return (int)$row['count'];
-                }, $methods)
-            ];
-            
-            $this->sendSuccess($data);
-            
+
+            // Normalize labels to Title Case without Card
+            $allowed = ['cash' => 'Cash', 'qris' => 'Qris', 'transfer' => 'Transfer'];
+            $labels = [];
+            $values = [];
+            $counts = [];
+            foreach ($methods as $row) {
+                $key = strtolower($row['payment_method']);
+                if (isset($allowed[$key])) {
+                    $labels[] = $allowed[$key];
+                    $values[] = (float)$row['total'];
+                    $counts[] = (int)$row['count'];
+                }
+            }
+
+            $this->sendSuccess([
+                'labels' => $labels,
+                'values' => $values,
+                'counts' => $counts
+            ]);
+
         } catch (Exception $e) {
             $this->sendError($e->getMessage(), 500);
         }

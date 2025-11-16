@@ -74,7 +74,7 @@ class ProductManager {
             }
             
             // Build API URL
-            let url = `../api.php?controller=product&action=list&page=${this.currentPage}&limit=${this.itemsPerPage}`;
+            let url = `../api.php?controller=product&action=list&page=${this.currentPage}&limit=${this.itemsPerPage}&t=${Date.now()}`;
             if (this.searchQuery) url += `&search=${encodeURIComponent(this.searchQuery)}`;
             if (this.categoryFilter) url += `&category_id=${this.categoryFilter}`;
             if (this.statusFilter !== '') url += `&is_active=${this.statusFilter}`;
@@ -247,17 +247,15 @@ class ProductManager {
                 </td>
                     <td style="text-align: center;">
                         <div class="action-buttons" style="display: flex; gap: 0.5rem; justify-content: center;">
-                            <button class="btn btn-sm btn-info" onclick="productManager.editProduct(${product.id})" title="Edit Product">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                            <button class="btn btn-sm btn-warning" onclick="productManager.adjustStock(${product.id})" title="Adjust Stock">
-                            <i class="fas fa-boxes"></i>
-                        </button>
-                            <button class="btn btn-sm btn-danger" onclick="productManager.deleteProduct(${product.id})" title="Delete Product">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </td>
+                            <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); productManager.editProduct(${product.id}, this)" title="Edit Product">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            
+                            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); productManager.deleteProduct(${product.id}, this)" title="Delete Product">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
             </tr>
             `;
         }).join('');
@@ -358,6 +356,16 @@ class ProductManager {
         document.getElementById('refreshBtn')?.addEventListener('click', () => {
             this.loadProducts();
             app.showToast('Products refreshed', 'success');
+        });
+
+        // Auto-refresh when tab becomes visible or window gains focus
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                this.loadProducts();
+            }
+        });
+        window.addEventListener('focus', () => {
+            this.loadProducts();
         });
 
         // Form submit
@@ -465,7 +473,7 @@ class ProductManager {
         
         // Reset image upload
         if (window.productImageUpload) {
-            window.productImageUpload.deleteImage();
+            window.productImageUpload.deleteImage(true, false);
         }
     }
 
@@ -567,10 +575,18 @@ class ProductManager {
         }
     }
 
-    async editProduct(id) {
+    async editProduct(id, btn = null) {
         try {
+            // Disable button and show spinner to prevent double-click
+            const originalHtml = btn ? btn.innerHTML : '';
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+
+            // Open form immediately with minimal fields; mark currentProductId
+            this.currentProductId = id;
+            this.showProductModal();
+
+            // Load product details
             const response = await app.apiCall(`../api.php?controller=product&action=get&id=${id}`);
-            
             if (response.success && response.data) {
                 this.showProductModal(response.data);
             } else {
@@ -579,40 +595,12 @@ class ProductManager {
         } catch (error) {
             console.error('Failed to load product:', error);
             app.showToast('Failed to load product', 'error');
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = originalHtml; }
         }
     }
 
-    async adjustStock(id) {
-        const product = this.products.find(p => p.id === id);
-        if (!product) return;
-
-        const newStock = prompt(`Adjust stock for "${product.name}"\n\nCurrent stock: ${product.stock_quantity} ${product.unit}\nEnter new stock quantity:`, product.stock_quantity);
-        
-        if (newStock === null) return; // User cancelled
-        
-        const stockQuantity = parseInt(newStock);
-        if (isNaN(stockQuantity) || stockQuantity < 0) {
-            app.showToast('Invalid stock quantity', 'error');
-            return;
-        }
-
-        try {
-            const response = await app.apiCall(`../api.php?controller=product&action=update&id=${id}`, {
-                method: 'POST',
-                body: JSON.stringify({ stock_quantity: stockQuantity })
-            });
-
-            if (response.success) {
-                app.showToast(`Stock adjusted to ${stockQuantity} ${product.unit}`, 'success');
-                await this.loadProducts();
-            } else {
-                app.showToast(response.message || 'Failed to adjust stock', 'error');
-            }
-        } catch (error) {
-            console.error('Failed to adjust stock:', error);
-            app.showToast('Failed to adjust stock', 'error');
-        }
-    }
+    
 
     async toggleStatus(id, isActive) {
         try {
@@ -637,15 +625,19 @@ class ProductManager {
         }
     }
 
-    async deleteProduct(id) {
+    async deleteProduct(id, btn = null) {
         const product = this.products.find(p => p.id === id);
         if (!product) return;
         
-        if (!confirm(`Are you sure you want to delete "${product.name}"?\n\nThis action cannot be undone.`)) {
-            return;
-        }
+        if (!confirm(`Are you sure you want to delete "${product.name}"?\n\nThis action cannot be undone.`)) { return; }
+        const confirmText = prompt(`Type the product name to confirm deletion:\n\n${product.name}\n\nAlternatively, type DELETE to proceed.`);
+        if (confirmText === null) { app.showToast('Deletion cancelled', 'info'); return; }
+        const ok = (confirmText && (confirmText.trim() === product.name || confirmText.trim().toUpperCase() === 'DELETE'));
+        if (!ok) { app.showToast('Confirmation text does not match', 'warning'); return; }
 
         try {
+            const originalHtml = btn ? btn.innerHTML : '';
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
             const response = await app.apiCall(`../api.php?controller=product&action=delete&id=${id}`, {
                 method: 'POST'
             });
@@ -659,6 +651,8 @@ class ProductManager {
         } catch (error) {
             console.error('Failed to delete product:', error);
             app.showToast('Failed to delete product', 'error');
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = originalHtml; }
         }
     }
 }
@@ -668,7 +662,10 @@ let productManager;
 if (document.readyState === 'loading') {
 document.addEventListener('DOMContentLoaded', () => {
     productManager = new ProductManager();
+    // Expose globally for inline onclick handlers
+    try { window.productManager = productManager; } catch (e) {}
 });
 } else {
     productManager = new ProductManager();
+    try { window.productManager = productManager; } catch (e) {}
 }

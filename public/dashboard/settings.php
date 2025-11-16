@@ -24,27 +24,32 @@ $page_title = 'Settings';
 $additional_css = [];
 $additional_js = [];
 
+// Aktifkan compact header untuk tampilan header yang rapi
+$header_compact = true;
+
 // Include header
 require_once 'includes/header.php';
 ?>
 
-<!-- Page Header -->
-<div class="page-header" style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1.5rem;">
-    <div style="flex: 1;">
-        <h1 style="font-size: 1.875rem; font-weight: 700; color: #111827; margin: 0 0 0.5rem 0;">
-            <i class="fas fa-cog" style="color: #667eea;"></i> System Settings
-        </h1>
+<!-- Page Header: Uniform Card Style -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-header">
+        <h3 class="card-title">
+            <i class="fas fa-cog"></i> System Settings
+        </h3>
+        <div class="card-actions action-buttons">
+            <button class="btn btn-secondary btn-sm" onclick="window.location.href='index.php'">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="settingsManager.saveAllSettings()">
+                <i class="fas fa-save"></i> Save All Changes
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
         <p style="color: #6b7280; font-size: 0.875rem; margin: 0;">
             Manage system configuration, company information, and preferences
         </p>
-    </div>
-    <div style="display: flex; gap: 0.75rem; flex-shrink: 0;">
-        <button class="btn btn-secondary" onclick="window.location.href='index.php'">
-            <i class="fas fa-arrow-left"></i> Back to Dashboard
-        </button>
-        <button class="btn btn-primary" onclick="settingsManager.saveAllSettings()">
-            <i class="fas fa-save"></i> Save All Changes
-        </button>
     </div>
 </div>
 
@@ -87,10 +92,10 @@ require_once 'includes/header.php';
                 <!-- System Status Cards -->
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
                     <!-- PHP Version Card -->
-                    <div class="card" style="border-left: 4px solid #667eea;">
+                    <div class="card" style="border-left: 4px solid var(--primary-color);">
                         <div class="card-body" style="padding: 1.5rem;">
                             <div style="display: flex; align-items: center; gap: 1rem;">
-                                <div style="width: 56px; height: 56px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                                <div style="width: 56px; height: 56px; background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
                                     <i class="fab fa-php" style="font-size: 1.75rem; color: white;"></i>
                                 </div>
                                 <div style="flex: 1;">
@@ -405,8 +410,8 @@ require_once 'includes/header.php';
                                                 </label>
                                                 <select id="bankDefault" class="form-control">
                                                     <option value="bca">BCA</option>
-                                                    <option value="mandiri">Mandiri</option>
-                                                    <option value="bni">BNI</option>
+                                                    <option value="bri">Bank BRI</option>
+                                                    <option value="blu_bca">BLU BCA</option>
                                                 </select>
                                             </div>
                                         </div>
@@ -426,28 +431,28 @@ require_once 'includes/header.php';
                                             </div>
                                         </div>
                                         <div class="form-group" style="background: #f9fafb; padding: 1rem; border-radius: 8px;">
-                                            <label class="form-label"><i class="fas fa-building" style="color: #2563eb;"></i> Mandiri</label>
+                                            <label class="form-label"><i class="fas fa-building" style="color: #2563eb;"></i> Bank BRI</label>
                                             <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
                                                 <div>
-                                                    <label for="bankMandiriName" class="form-label">Account Name</label>
-                                                    <input type="text" id="bankMandiriName" class="form-control" placeholder="Nama pemilik rekening Mandiri">
+                                                    <label for="bankBriName" class="form-label">Account Name</label>
+                                                    <input type="text" id="bankBriName" class="form-control" placeholder="Nama pemilik rekening Bank BRI">
                                                 </div>
                                                 <div>
-                                                    <label for="bankMandiriAccount" class="form-label">Account Number</label>
-                                                    <input type="text" id="bankMandiriAccount" class="form-control" placeholder="Nomor rekening Mandiri">
+                                                    <label for="bankBriAccount" class="form-label">Account Number</label>
+                                                    <input type="text" id="bankBriAccount" class="form-control" placeholder="Nomor rekening Bank BRI">
                                                 </div>
                                             </div>
                                         </div>
                                         <div class="form-group" style="background: #f9fafb; padding: 1rem; border-radius: 8px;">
-                                            <label class="form-label"><i class="fas fa-building" style="color: #2563eb;"></i> BNI</label>
+                                            <label class="form-label"><i class="fas fa-building" style="color: #2563eb;"></i> BLU BCA</label>
                                             <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
                                                 <div>
-                                                    <label for="bankBniName" class="form-label">Account Name</label>
-                                                    <input type="text" id="bankBniName" class="form-control" placeholder="Nama pemilik rekening BNI">
+                                                    <label for="bankBluBcaName" class="form-label">Account Name</label>
+                                                    <input type="text" id="bankBluBcaName" class="form-control" placeholder="Nama pemilik rekening BLU BCA">
                                                 </div>
                                                 <div>
-                                                    <label for="bankBniAccount" class="form-label">Account Number</label>
-                                                    <input type="text" id="bankBniAccount" class="form-control" placeholder="Nomor rekening BNI">
+                                                    <label for="bankBluBcaAccount" class="form-label">Account Number</label>
+                                                    <input type="text" id="bankBluBcaAccount" class="form-control" placeholder="Nomor rekening BLU BCA">
                                                 </div>
                                             </div>
                                         </div>
@@ -480,15 +485,15 @@ require_once 'includes/header.php';
                         <form id="posSettingsForm">
                             <!-- Section: General POS -->
                             <div style="margin-bottom: 2rem;">
-                                <h4 style="font-size: 1rem; font-weight: 600; color: #374151; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid #667eea;">
-                                    <i class="fas fa-cog" style="color: #667eea;"></i> General Settings
+                                <h4 style="font-size: 1rem; font-weight: 600; color: #374151; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--primary-color);">
+                                    <i class="fas fa-cog" style="color: var(--primary-color);"></i> General Settings
                                 </h4>
                                 
                                 <div style="background: #f9fafb; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem;">
                                     <label class="toggle-switch-label" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
                                         <div>
                                             <div style="font-weight: 600; color: #111827; margin-bottom: 0.25rem;">
-                                                <i class="fas fa-barcode" style="color: #667eea; margin-right: 0.5rem;"></i>
+                                                <i class="fas fa-barcode" style="color: var(--primary-color); margin-right: 0.5rem;"></i>
                                                 Enable Barcode Scanner
                                             </div>
                                             <div style="font-size: 0.875rem; color: #6b7280;">Allow quick product lookup using barcode scanner</div>
@@ -504,7 +509,7 @@ require_once 'includes/header.php';
                                     <label class="toggle-switch-label" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
                                         <div>
                                             <div style="font-weight: 600; color: #111827; margin-bottom: 0.25rem;">
-                                                <i class="fas fa-print" style="color: #667eea; margin-right: 0.5rem;"></i>
+                                                <i class="fas fa-print" style="color: var(--primary-color); margin-right: 0.5rem;"></i>
                                                 Auto Print Receipt
                                             </div>
                                             <div style="font-size: 0.875rem; color: #6b7280;">Automatically print receipt after successful transaction</div>
@@ -520,7 +525,7 @@ require_once 'includes/header.php';
                                     <label class="toggle-switch-label" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
                                         <div>
                                             <div style="font-weight: 600; color: #111827; margin-bottom: 0.25rem;">
-                                                <i class="fas fa-box-open" style="color: #667eea; margin-right: 0.5rem;"></i>
+                                                <i class="fas fa-box-open" style="color: var(--primary-color); margin-right: 0.5rem;"></i>
                                                 Allow Negative Stock
                                             </div>
                                             <div style="font-size: 0.875rem; color: #6b7280;">Allow selling products even when stock is zero or negative</div>
@@ -1366,13 +1371,20 @@ const settingsManager = {
         if (settings.tax_rate_shop !== undefined) this.setInputValue('taxRateShop', settings.tax_rate_shop);
 
         // Bank Transfer Settings
-        if (settings.bank_default) this.setInputValue('bankDefault', settings.bank_default);
+        if (settings.bank_default) {
+            const def = settings.bank_default === 'mandiri' ? 'bri' : (settings.bank_default === 'bni' ? 'blu_bca' : settings.bank_default);
+            this.setInputValue('bankDefault', def);
+        }
         if (settings.bank_bca_name) this.setInputValue('bankBcaName', settings.bank_bca_name);
         if (settings.bank_bca_account) this.setInputValue('bankBcaAccount', settings.bank_bca_account);
-        if (settings.bank_mandiri_name) this.setInputValue('bankMandiriName', settings.bank_mandiri_name);
-        if (settings.bank_mandiri_account) this.setInputValue('bankMandiriAccount', settings.bank_mandiri_account);
-        if (settings.bank_bni_name) this.setInputValue('bankBniName', settings.bank_bni_name);
-        if (settings.bank_bni_account) this.setInputValue('bankBniAccount', settings.bank_bni_account);
+        const briName = settings.bank_bri_name ?? settings.bank_mandiri_name;
+        const briAcc = settings.bank_bri_account ?? settings.bank_mandiri_account;
+        if (briName) this.setInputValue('bankBriName', briName);
+        if (briAcc) this.setInputValue('bankBriAccount', briAcc);
+        const bluName = settings.bank_blu_bca_name ?? settings.bank_bni_name;
+        const bluAcc = settings.bank_blu_bca_account ?? settings.bank_bni_account;
+        if (bluName) this.setInputValue('bankBluBcaName', bluName);
+        if (bluAcc) this.setInputValue('bankBluBcaAccount', bluAcc);
         
         // POS Settings
         if (settings.enable_barcode_scanner) this.setCheckboxValue('enableBarcodeScanner', settings.enable_barcode_scanner === '1');
@@ -1607,10 +1619,10 @@ const settingsManager = {
                 const bankDefault = document.getElementById('bankDefault');
                 const bankBcaName = document.getElementById('bankBcaName');
                 const bankBcaAccount = document.getElementById('bankBcaAccount');
-                const bankMandiriName = document.getElementById('bankMandiriName');
-                const bankMandiriAccount = document.getElementById('bankMandiriAccount');
-                const bankBniName = document.getElementById('bankBniName');
-                const bankBniAccount = document.getElementById('bankBniAccount');
+                const bankBriName = document.getElementById('bankBriName');
+                const bankBriAccount = document.getElementById('bankBriAccount');
+                const bankBluBcaName = document.getElementById('bankBluBcaName');
+                const bankBluBcaAccount = document.getElementById('bankBluBcaAccount');
                 
                 if (companyName) data.company_name = companyName.value;
                 if (companyPhone) data.company_phone = companyPhone.value;
@@ -1629,10 +1641,10 @@ const settingsManager = {
                 if (bankDefault) data.bank_default = bankDefault.value;
                 if (bankBcaName) data.bank_bca_name = bankBcaName.value;
                 if (bankBcaAccount) data.bank_bca_account = bankBcaAccount.value;
-                if (bankMandiriName) data.bank_mandiri_name = bankMandiriName.value;
-                if (bankMandiriAccount) data.bank_mandiri_account = bankMandiriAccount.value;
-                if (bankBniName) data.bank_bni_name = bankBniName.value;
-                if (bankBniAccount) data.bank_bni_account = bankBniAccount.value;
+                if (bankBriName) data.bank_bri_name = bankBriName.value;
+                if (bankBriAccount) data.bank_bri_account = bankBriAccount.value;
+                if (bankBluBcaName) data.bank_blu_bca_name = bankBluBcaName.value;
+                if (bankBluBcaAccount) data.bank_blu_bca_account = bankBluBcaAccount.value;
                 break;
                 
             case 'pos':

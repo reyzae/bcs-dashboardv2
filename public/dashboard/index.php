@@ -14,8 +14,10 @@ requireAuth();
 // Page configuration
 $page_title = getDashboardTitle();
 $additional_css = []; // dashboard.css not needed - using style.css
-// Enable dashboard.js - API issues fixed
+// Konsisten dengan halaman lain: aktifkan dashboard.js dan compact header
 $additional_js = ['dashboard.js'];
+$header_compact = true;
+$hide_welcome_banner = true;
 
 // Get current user
 $current_user = getCurrentUser();
@@ -26,23 +28,14 @@ include __DIR__ . '/includes/header.php';
 
 <!-- Role-based Dashboard Content -->
 <?php if ($current_user['role'] === 'admin'): ?>
-    <!-- ADMIN DASHBOARD -->
     <?php include __DIR__ . '/views/dashboard/admin.php'; ?>
-
 <?php elseif ($current_user['role'] === 'manager'): ?>
-    <!-- MANAGER DASHBOARD -->
     <?php include __DIR__ . '/views/dashboard/manager.php'; ?>
-
 <?php elseif ($current_user['role'] === 'staff'): ?>
-    <!-- STAFF (STOCK MANAGEMENT) DASHBOARD -->
     <?php include __DIR__ . '/views/dashboard/staff.php'; ?>
-
 <?php elseif ($current_user['role'] === 'cashier'): ?>
-    <!-- CASHIER DASHBOARD -->
     <?php include __DIR__ . '/views/dashboard/cashier.php'; ?>
-
 <?php else: ?>
-    <!-- DEFAULT DASHBOARD -->
     <div class="alert alert-warning">
         <i class="fas fa-exclamation-triangle"></i>
         Unknown role. Please contact administrator.
@@ -50,7 +43,6 @@ include __DIR__ . '/includes/header.php';
 <?php endif; ?>
 
 <?php
-// Include footer
 include __DIR__ . '/includes/footer.php';
 ?>
 

@@ -20,6 +20,16 @@ ini_set('html_errors', '0');
 
 // Set JSON response header
 header('Content-Type: application/json');
+// Disable caching for API responses
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+// Security headers for API responses
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header("Content-Security-Policy: frame-ancestors 'self'; base-uri 'self'");
+header('Vary: Origin');
 
 // CORS Configuration - Production Ready
 $isProduction = ($_ENV['APP_ENV'] ?? 'development') === 'production';
@@ -30,15 +40,26 @@ if ($isProduction) {
     if ($origin && parse_url($origin, PHP_URL_HOST) === parse_url($allowedOrigin, PHP_URL_HOST)) {
         header('Access-Control-Allow-Origin: ' . $origin);
     }
-    // Fallback: allow same-origin requests
+    // Validate origin strictly in production
     SecurityMiddleware::validateOrigin();
 } else {
-    // Development: Allow all origins (for localhost testing)
-    header('Access-Control-Allow-Origin: *');
+    // Development: Echo back requesting origin to allow credentials
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    if (!empty($origin)) {
+        header('Access-Control-Allow-Origin: ' . $origin);
+    } else {
+        // Same-origin requests without Origin header will still work
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        if (!empty($host)) {
+            header('Access-Control-Allow-Origin: ' . $scheme . $host);
+        }
+    }
 }
 
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
+// Enumerate allowed headers explicitly for better preflight behavior
+header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token, X-Requested-With, Authorization');
 header('Access-Control-Allow-Credentials: true');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {

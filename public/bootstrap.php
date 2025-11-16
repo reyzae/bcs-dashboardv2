@@ -25,7 +25,9 @@ $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
 ini_set('session.cookie_httponly', '1');
 ini_set('session.cookie_secure', $isHttps ? '1' : '0');
 // PHP 7.3+: samesite via ini; fallback is fine on older versions
-ini_set('session.cookie_samesite', 'Lax');
+// Tighten SameSite policy: Strict in production, Lax in development
+$isProductionEnv = ($_ENV['APP_ENV'] ?? 'development') === 'production';
+ini_set('session.cookie_samesite', $isProductionEnv ? 'Strict' : 'Lax');
 
 // Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
@@ -45,4 +47,66 @@ if (($_ENV['APP_DEBUG'] ?? 'false') === 'true') {
 } else {
     error_reporting(0);
     ini_set('display_errors', 0);
+}
+
+// Security headers (apply to HTML pages via bootstrap)
+$isProduction = ($_ENV['APP_ENV'] ?? 'development') === 'production';
+// Content Security Policy: allow required CDNs used by dashboard
+$csp = "default-src 'self'; "
+    . "img-src 'self' data: blob:; "
+    . "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
+    . "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+    . "font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
+    . "connect-src 'self'; "
+    . "frame-ancestors 'self'; "
+    . "base-uri 'self'";
+header('Content-Security-Policy: ' . $csp);
+header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header('X-Content-Type-Options: nosniff');
+if ($isHttps && $isProduction) {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
+}
+
+// Auto-login via Remember Me cookie if session missing
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['remember_me'])) {
+    $token = $_COOKIE['remember_me'];
+    $baseDir = __DIR__ . '/../storage/sessions/remember_tokens';
+    $file = $baseDir . '/' . basename($token) . '.json';
+    if (is_file($file)) {
+        $data = json_decode(@file_get_contents($file), true);
+        if (is_array($data) && isset($data['user_id'], $data['expiry']) && $data['expiry'] > time()) {
+            // Load user from database to restore full session
+            require_once __DIR__ . '/../app/config/database.php';
+            require_once __DIR__ . '/../app/models/User.php';
+            try {
+                $database = new Database();
+                $pdo = $database->getConnection();
+                $userModel = new User($pdo);
+                $user = $userModel->find($data['user_id']);
+                if ($user && (!isset($user['is_active']) || $user['is_active'])) {
+                    if (session_status() === PHP_SESSION_NONE) {
+                        session_start();
+                    }
+                    session_regenerate_id(true);
+                    $_SESSION['user_id'] = $user['id'];
+                    $_SESSION['user_role'] = $user['role'] ?? null;
+                    $_SESSION['username'] = $user['username'] ?? null;
+                    $_SESSION['full_name'] = $user['full_name'] ?? null;
+                    $_SESSION['user_email'] = $user['email'] ?? null;
+                    $_SESSION['last_activity'] = time();
+                }
+            } catch (Exception $e) {
+                // If database fails, ignore remember-me restore
+            }
+        } else {
+            // Expired token: clean up
+            @unlink($file);
+        }
+    }
+}
+
+// Periodic cleanup of expired remember-me tokens (lightweight)
+if (class_exists('SecurityMiddleware') && rand(1, 100) === 1) {
+    SecurityMiddleware::cleanupRememberTokens();
 }

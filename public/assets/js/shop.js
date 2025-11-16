@@ -83,14 +83,9 @@ const Utils = {
                 <i class="fas ${icon || icons[type]}"></i>
                 <span>${message}</span>
             </div>
-            <div class="toast-progress"></div>
         `;
         
         toast.className = `toast-advanced toast-${type} show`;
-        
-        // Progress bar animation
-        const progress = toast.querySelector('.toast-progress');
-        progress.style.animation = 'toastProgress 3s linear';
         
         setTimeout(() => {
             toast.classList.remove('show');
@@ -184,6 +179,23 @@ const Utils = {
     }
 };
 
+// Ephemeral success badge near the clicked button
+function showAddBadge(buttonElement, message = 'Ditambahkan') {
+    try {
+        const card = buttonElement.closest('.product-card') || document.body;
+        const badge = document.createElement('div');
+        badge.className = 'added-badge';
+        badge.innerHTML = `<i class="fas fa-check"></i> ${message}`;
+        card.appendChild(badge);
+        const rect = buttonElement.getBoundingClientRect();
+        const x = rect.left + window.scrollX - 12;
+        const y = rect.top + window.scrollY - 12;
+        badge.style.left = x + 'px';
+        badge.style.top = y + 'px';
+        setTimeout(() => { badge.classList.add('hide'); setTimeout(() => badge.remove(), 400); }, 900);
+    } catch (e) {}
+}
+
 // Shopping Cart Manager
 const ShopCart = {
     getCart: () => {
@@ -194,27 +206,35 @@ const ShopCart = {
     saveCart: (cart) => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(cart));
         ShopCart.updateCartCount();
+        // Reflect UI changes when on cart page
+        try { ShopCart.updateCartDisplay(); } catch (e) { /* no-op */ }
     },
 
     addToCart: (product, quantity = 1) => {
         let cart = ShopCart.getCart();
         const existingItem = cart.find(item => item.id === product.id);
 
+        // Normalize and clamp quantity to stock
+        const maxQty = (typeof product.stock_quantity === 'number' && product.stock_quantity > 0)
+            ? parseInt(product.stock_quantity, 10)
+            : Number.MAX_SAFE_INTEGER;
+        quantity = Math.max(1, parseInt(quantity, 10) || 1);
+
         if (existingItem) {
-            existingItem.quantity += quantity;
+            existingItem.quantity = Math.min((existingItem.quantity || 0) + quantity, maxQty);
+            existingItem.stock_quantity = product.stock_quantity;
         } else {
             cart.push({
                 id: product.id,
                 name: product.name,
                 price: product.price,
                 image: product.image,
-                quantity: quantity,
+                quantity: Math.min(quantity, maxQty),
                 stock_quantity: product.stock_quantity
             });
         }
 
         ShopCart.saveCart(cart);
-        Utils.showToast(`${product.name} added to cart`, 'success');
         // Immediately reflect changes in UI (e.g., when on cart page)
         try { ShopCart.updateCartDisplay(); } catch (e) { /* noop */ }
     },
@@ -230,14 +250,34 @@ const ShopCart = {
                 item.quantity = quantity;
             }
             ShopCart.saveCart(cart);
+            // Soft animation feedback on row
+            try {
+                const row = document.querySelector(`.cart-item[data-id="${productId}"]`);
+                if (row) {
+                    row.classList.add('pulse');
+                    setTimeout(() => row.classList.remove('pulse'), 350);
+                }
+            } catch (e) {}
         }
     },
 
     removeFromCart: (productId) => {
-        let cart = ShopCart.getCart();
-        cart = cart.filter(item => item.id !== productId);
-        ShopCart.saveCart(cart);
-        Utils.showToast('Item removed from cart', 'info');
+        // Animate fade-out then remove
+        const row = document.querySelector(`.cart-item[data-id="${productId}"]`);
+        if (row) {
+            row.classList.add('fade-out');
+            setTimeout(() => {
+                let cart = ShopCart.getCart();
+                cart = cart.filter(item => item.id !== productId);
+                ShopCart.saveCart(cart);
+                Utils.showToast('Item removed from cart', 'info');
+            }, 180);
+        } else {
+            let cart = ShopCart.getCart();
+            cart = cart.filter(item => item.id !== productId);
+            ShopCart.saveCart(cart);
+            Utils.showToast('Item removed from cart', 'info');
+        }
     },
 
     clearCart: () => {
@@ -278,6 +318,7 @@ const ShopCart = {
         
         cartCountElements.forEach(element => {
             element.textContent = totalItems;
+            element.style.display = totalItems > 0 ? 'inline-block' : 'none';
         });
     },
 
@@ -300,8 +341,8 @@ const ShopCart = {
         if (summary) summary.style.display = 'block';
 
         container.innerHTML = cart.map(item => `
-            <div class="cart-item">
-                <img src="${Utils.resolveImageUrl(item.image, '../assets/img/product-placeholder.jpg')}" 
+            <div class="cart-item" data-id="${item.id}">
+                <img src="${Utils.resolveImageUrl(item.image, '../assets/img/no-image.svg')}" 
                      alt="${item.name}" 
                      class="cart-item-image">
                 
@@ -310,14 +351,14 @@ const ShopCart = {
                     <p class="cart-item-price">${Utils.formatCurrency(item.price)}</p>
                     
                     <div class="cart-item-quantity">
-                        <button class="quantity-btn" onclick="ShopCart.updateQuantity(${item.id}, ${item.quantity - 1})">
-                            <i class="fas fa-minus"></i>
-                        </button>
-                        <input type="number" value="${item.quantity}" min="1" max="${item.stock_quantity || item.stock || ''}" 
+                    <button class="quantity-btn" aria-label="Kurangi jumlah" onclick="ShopCart.updateQuantity(${item.id}, ${item.quantity - 1})">
+                        <i class="fas fa-minus"></i>
+                    </button>
+                        <input type="number" aria-label="Jumlah" value="${item.quantity}" min="1" max="${item.stock_quantity || item.stock || ''}" 
                                onchange="ShopCart.updateQuantity(${item.id}, parseInt(this.value))">
-                        <button class="quantity-btn" onclick="ShopCart.updateQuantity(${item.id}, ${item.quantity + 1})">
-                            <i class="fas fa-plus"></i>
-                        </button>
+                        <button class="quantity-btn" aria-label="Tambah jumlah" onclick="ShopCart.updateQuantity(${item.id}, ${item.quantity + 1})">
+                        <i class="fas fa-plus"></i>
+                    </button>
                     </div>
                 </div>
                 
@@ -362,6 +403,11 @@ const ShopCart = {
             : 'Tax (Inactive)';
         if (summaryTaxLabel) summaryTaxLabel.textContent = labelText;
         if (checkoutTaxLabel) checkoutTaxLabel.textContent = labelText;
+        const summaryTaxRow = summaryTaxLabel ? summaryTaxLabel.closest('.summary-row') : null;
+        if (summaryTaxRow) summaryTaxRow.style.display = (window.ShopSettings && ShopSettings.enableTaxShop) || tax > 0 ? 'flex' : 'none';
+        const summaryShippingEl = document.getElementById('summaryShipping');
+        const summaryShippingRow = summaryShippingEl ? summaryShippingEl.closest('.summary-row') : null;
+        if (summaryShippingRow) summaryShippingRow.style.display = 'none';
     },
 
     updateCartDisplay: () => {
@@ -493,6 +539,7 @@ const ShopCatalog = {
                     <img src="${Utils.resolveImageUrl(product.image, '../assets/img/no-image.svg')}" 
                          alt="${product.name}" 
                          class="product-image"
+                         loading="lazy" decoding="async"
                          onerror="this.src='../assets/img/no-image.svg'">
                     ${stockBadge}
                     <div class="product-overlay">
@@ -518,9 +565,10 @@ const ShopCatalog = {
                                 <i class="fas fa-plus"></i>
                             </button>
                         </div>
-                        <button class="btn-add-to-cart ${isOutOfStock ? 'disabled' : ''}" 
+                        <button type="button" class="btn-add-to-cart ${isOutOfStock ? 'disabled' : ''}" 
                                 data-product-id="${product.id}"
-                                ${isOutOfStock ? 'disabled title="Produk habis"' : 'title="Tambah ke keranjang"'}>
+                                ${isOutOfStock ? 'disabled title="Produk habis"' : 'title="Tambah ke keranjang"'}
+                                onclick="event.preventDefault(); event.stopPropagation(); ShopCatalog.addToCartDirect(${product.id}, (function(){var el=document.querySelector('[data-qty-id=${product.id}]'); return el? (parseInt(el.textContent)||1) : 1;})());">
                             <i class="fas fa-shopping-cart"></i>
                             <span>${isOutOfStock ? 'Habis' : 'Tambah ke Keranjang'}</span>
                         </button>
@@ -543,28 +591,12 @@ const ShopCatalog = {
         // Get button element for animation (target the actual button)
         const button = document.querySelector(`button.btn-add-to-cart[data-product-id="${productId}"]`);
         if (button) {
-            // Add loading state
             const originalContent = button.innerHTML;
             button.disabled = true;
-            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menambah...';
-            button.classList.add('loading');
-            
-            // Add to cart immediately
             ShopCart.addToCart(product, quantity);
-            
-            // Animate button
-            button.innerHTML = '<i class="fas fa-check"></i> Ditambahkan!';
-            button.classList.add('success');
-            
-            // Animate cart icon
             Utils.animateCartIcon(button);
-            
-            // Reset button after animation
-            setTimeout(() => {
-                button.disabled = false;
-                button.innerHTML = originalContent;
-                button.classList.remove('loading', 'success');
-            }, 1200);
+            if (typeof window.showAddBadge === 'function') { window.showAddBadge(button, 'Ditambahkan'); }
+            setTimeout(() => { button.disabled = false; button.innerHTML = originalContent; }, 900);
         } else {
             ShopCart.addToCart(product, quantity);
         }
@@ -760,12 +792,51 @@ const ShopCatalog = {
                     e.preventDefault();
                     e.stopPropagation();
                     const productId = parseInt(addBtn.getAttribute('data-product-id'), 10);
-                    const qtyEl = document.querySelector(`[data-qty-id="${productId}"]`);
-                    const qtyText = (qtyEl && qtyEl.textContent) ? qtyEl.textContent : '1';
-                    const qty = parseInt(qtyText, 10) || 1;
+                    const parentCard = addBtn.closest('.product-card');
+                    // Prefer numeric input in classic layout
+                    let qtyInput = parentCard ? parentCard.querySelector('input[name="qty"]') : null;
+                    let qty = qtyInput ? parseInt(qtyInput.value, 10) : NaN;
+                    if (!qty || isNaN(qty)) {
+                        // Fallback to qty display in modern layout
+                        const qtyEl = parentCard ? parentCard.querySelector(`[data-qty-id="${productId}"]`) : document.querySelector(`[data-qty-id="${productId}"]`);
+                        const qtyText = (qtyEl && qtyEl.textContent) ? qtyEl.textContent : '1';
+                        qty = parseInt(qtyText, 10) || 1;
+                    }
+                    // Clamp quantity to valid range
+                    qty = Math.max(1, qty);
+                    const product = ShopCatalog.products.find(p => p.id === productId);
+                    if (product && typeof product.stock_quantity === 'number') {
+                        qty = Math.min(qty, product.stock_quantity);
+                    }
                     ShopCatalog.addToCartDirect(productId, qty);
                 }
             });
+        }
+
+        // Global fallback: ensure clicks work even if grid listener fails
+        if (!window.__BB_ADD_TO_CART_LISTENER_ADDED__) {
+            window.__BB_ADD_TO_CART_LISTENER_ADDED__ = true;
+            document.addEventListener('click', (e) => {
+                const addBtn = e.target.closest('button.btn-add-to-cart');
+                if (!addBtn || addBtn.classList.contains('disabled')) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const productId = parseInt(addBtn.getAttribute('data-product-id'), 10);
+                const parentCard = addBtn.closest('.product-card');
+                let qtyInput = parentCard ? parentCard.querySelector('input[name="qty"]') : null;
+                let qty = qtyInput ? parseInt(qtyInput.value, 10) : NaN;
+                if (!qty || isNaN(qty)) {
+                    const qtyEl = parentCard ? parentCard.querySelector(`[data-qty-id="${productId}"]`) : document.querySelector(`[data-qty-id="${productId}"]`);
+                    const qtyText = (qtyEl && qtyEl.textContent) ? qtyEl.textContent : '1';
+                    qty = parseInt(qtyText, 10) || 1;
+                }
+                qty = Math.max(1, qty);
+                const product = ShopCatalog.products.find(p => p.id === productId);
+                if (product && typeof product.stock_quantity === 'number') {
+                    qty = Math.min(qty, product.stock_quantity);
+                }
+                ShopCatalog.addToCartDirect(productId, qty);
+            }, true);
         }
     }
 };
@@ -852,10 +923,41 @@ const ShopProduct = {
 const ShopCheckout = {
     // Menyimpan data order terakhir untuk keperluan cetak invoice / share
     currentOrderData: null,
+    expiryTimer: null,
+    statusPollTimer: null,
     initialize: () => {
+        // Prefill HANYA jika pengguna mengaktifkan autofill sebelumnya
+        try {
+            const auto = localStorage.getItem('checkout_autofill');
+            if (auto === '1' || auto === 'true') {
+                ShopCheckout.prefillSavedCustomer();
+            } else {
+                ['customer_name','customer_email','customer_phone','customer_address']
+                    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+            }
+        } catch (e) { /* ignore */ }
         ShopCheckout.loadCheckoutItems();
         ShopCheckout.setupCheckoutListeners();
         ShopCart.updateCartCount();
+    },
+
+    prefillSavedCustomer: () => {
+        const setVal = (id, value) => {
+            const el = document.getElementById(id);
+            if (el && value) el.value = value;
+        };
+        try {
+            const name = localStorage.getItem('checkout_name');
+            const email = localStorage.getItem('checkout_email');
+            const phone = localStorage.getItem('checkout_phone');
+            const address = localStorage.getItem('checkout_address');
+            setVal('customer_name', name);
+            setVal('customer_email', email);
+            setVal('customer_phone', phone);
+            setVal('customer_address', address);
+        } catch (e) {
+            console.warn('Prefill error', e);
+        }
     },
 
     loadCheckoutItems: () => {
@@ -870,14 +972,14 @@ const ShopCheckout = {
         }
 
         container.innerHTML = cart.map(item => `
-            <div class="order-item" style="display: flex; gap: 1rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border-color);">
+            <div class="order-item" style="display: flex; gap: .75rem; padding: .5rem 0; border: none; border-bottom: 1px solid var(--border-color); border-radius: 0;">
                 <div style="flex: 1;">
                     <div style="font-weight: 600;">${item.name}</div>
                     <div style="color: var(--text-light); font-size: 0.875rem;">
                         ${Utils.formatCurrency(item.price)} x ${item.quantity}
                     </div>
                 </div>
-                <div style="font-weight: 700; color: var(--primary-color);">
+                <div style="font-weight: 600; color: var(--text-dark);">
                     ${Utils.formatCurrency(item.price * item.quantity)}
                 </div>
             </div>
@@ -891,10 +993,56 @@ const ShopCheckout = {
         if (checkoutForm) {
             checkoutForm.addEventListener('submit', ShopCheckout.processCheckout);
         }
+
+        // Fallback: jika event submit tidak terpicu karena validasi HTML, tampilkan feedback
+        const submitBtn = document.getElementById('placeOrderBtn');
+        if (submitBtn) {
+            submitBtn.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                const form = document.getElementById('checkoutForm');
+                if (!form) return;
+                if (!form.checkValidity()) { form.reportValidity(); return; }
+                ShopCheckout.processCheckout({ preventDefault: () => {}, target: form });
+            });
+        }
+    },
+
+    // Control visibility of CTAs based on payment status
+    setCTAs: (isPaid) => {
+        // QRIS CTAs
+        const shareQr = document.getElementById('shareWhatsAppBtnQr');
+        const trackQr = document.getElementById('trackOrderLinkQr');
+        if (trackQr) trackQr.style.display = 'inline-block'; // always visible
+        if (shareQr) {
+            shareQr.style.display = isPaid ? 'inline-block' : 'none';
+            if (isPaid) {
+                shareQr.classList.add('cta-bounce');
+                setTimeout(() => shareQr.classList.remove('cta-bounce'), 600);
+            }
+        }
+
+        // Transfer CTAs
+        const shareTf = document.getElementById('shareWhatsAppBtnTransfer');
+        const trackTf = document.getElementById('trackOrderLinkTf');
+        if (trackTf) trackTf.style.display = 'inline-block'; // always visible
+        if (shareTf) {
+            shareTf.style.display = isPaid ? 'inline-block' : 'none';
+            if (isPaid) {
+                shareTf.classList.add('cta-bounce');
+                setTimeout(() => shareTf.classList.remove('cta-bounce'), 600);
+            }
+        }
     },
 
     processCheckout: async (e) => {
         e.preventDefault();
+
+        // Pastikan field wajib terisi dan tampilkan feedback native
+        const form = e.target;
+        if (form && !form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
 
         const cart = ShopCart.getCart();
         if (cart.length === 0) {
@@ -919,9 +1067,11 @@ const ShopCheckout = {
 
         // Disable button
         const submitBtn = document.getElementById('placeOrderBtn');
-        const originalText = submitBtn.innerHTML;
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+        const originalText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+        }
 
         try {
             const response = await Utils.apiCall('?controller=order&action=create', {
@@ -933,14 +1083,32 @@ const ShopCheckout = {
             if (response.success) {
                 ShopCheckout.showPaymentSection(response.data);
                 ShopCart.clearCart();
+
+                // Simpan info pelanggan hanya jika autofill diaktifkan
+                try {
+                    const auto = localStorage.getItem('checkout_autofill');
+                    if (auto === '1' || auto === 'true') {
+                        localStorage.setItem('checkout_name', orderData.customer_name || '');
+                        localStorage.setItem('checkout_email', orderData.customer_email || '');
+                        localStorage.setItem('checkout_phone', orderData.customer_phone || '');
+                        localStorage.setItem('checkout_address', orderData.customer_address || '');
+                    } else {
+                        localStorage.removeItem('checkout_name');
+                        localStorage.removeItem('checkout_email');
+                        localStorage.removeItem('checkout_phone');
+                        localStorage.removeItem('checkout_address');
+                    }
+                } catch (e) {}
             } else {
                 Utils.showToast(response.error || 'Order failed', 'error');
             }
         } catch (error) {
             Utils.showToast('Failed to place order: ' + error.message, 'error');
         } finally {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalText;
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            }
         }
     },
 
@@ -955,6 +1123,12 @@ const ShopCheckout = {
         const paymentSection = document.getElementById('paymentSection');
         paymentSection.style.display = 'block';
 
+        const page = document.querySelector('.checkout-page');
+        if (page) {
+            page.classList.add('order-created', 'order-created-horizontal');
+            try { page.appendChild(paymentSection); } catch (e) {}
+        }
+
         // Set order number
         document.getElementById('orderNumber').textContent = orderData.order_number;
 
@@ -965,29 +1139,113 @@ const ShopCheckout = {
             ShopCheckout.showTransferPayment(orderData);
         }
 
-        // Update track order link
-        const trackLink = document.getElementById('trackOrderLink');
-        if (trackLink) {
-            trackLink.href = `order-status.php?order_number=${orderData.order_number}&email=${orderData.customer_email}`;
-        }
+        // Update track order link untuk masing-masing metode
+        const trackQr = document.getElementById('trackOrderLinkQr');
+        if (trackQr) trackQr.href = `order-status.php?code=${orderData.order_number}`;
+        const trackTf = document.getElementById('trackOrderLinkTf');
+        if (trackTf) trackTf.href = `order-status.php?code=${orderData.order_number}`;
+
+        // Bind cancel buttons
+        const cancelQr = document.getElementById('cancelOrderBtnQr');
+        if (cancelQr) cancelQr.onclick = async () => {
+            const confirmCancel = window.confirm('Batalkan pesanan ini?');
+            if (!confirmCancel) return;
+            cancelQr.disabled = true;
+            const original = cancelQr.innerHTML;
+            cancelQr.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+            try {
+                await ShopCheckout.cancelOrder(orderData.order_number, 'buyer_cancel');
+            } finally {
+                cancelQr.innerHTML = original;
+                cancelQr.disabled = false;
+            }
+        };
+        const cancelTf = document.getElementById('cancelOrderBtnTransfer');
+        if (cancelTf) cancelTf.onclick = async () => {
+            const confirmCancel = window.confirm('Batalkan pesanan ini?');
+            if (!confirmCancel) return;
+            cancelTf.disabled = true;
+            const original = cancelTf.innerHTML;
+            cancelTf.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+            try {
+                await ShopCheckout.cancelOrder(orderData.order_number, 'buyer_cancel');
+            } finally {
+                cancelTf.innerHTML = original;
+                cancelTf.disabled = false;
+            }
+        };
     },
 
     showQRISPayment: (orderData) => {
         const qrisSection = document.getElementById('qrisPayment');
         qrisSection.style.display = 'block';
 
-        // Set QR code image
-        if (orderData.payment && orderData.payment.qr_code_url) {
-            document.getElementById('qrCodeImage').src = Utils.resolveImageUrl(orderData.payment.qr_code_url, '../assets/img/no-image.svg');
-        }
+        // Set QR code image statically to QRIS GoPay asset
+        // Requirement: QR on checkout must be fixed and not change
+        document.getElementById('qrCodeImage').src = '/assets/img/qris-gopay.svg';
 
         // Set amount
         document.getElementById('paymentAmount').textContent = Utils.formatCurrency(orderData.total_amount);
 
-        // Setup simulate payment button
-        document.getElementById('simulatePaymentBtn').addEventListener('click', async () => {
-            await ShopCheckout.simulatePayment(orderData.order_number);
-        });
+        // Start expiry countdown if available
+        const expiredAt = orderData.payment?.expired_at || orderData.payment_info?.expired_at;
+        if (expiredAt) {
+            ShopCheckout.startExpiryCountdown(expiredAt, 'qrExpiry');
+        } else {
+            const expiryEl = document.getElementById('qrExpiry');
+            if (expiryEl) expiryEl.textContent = '-';
+        }
+
+        // Bind verification request button (buyer indicates they already paid)
+        const manualBtnQr = document.getElementById('manualPaidBtnQr');
+        if (manualBtnQr) {
+            manualBtnQr.onclick = async () => {
+                manualBtnQr.disabled = true;
+                const original = manualBtnQr.innerHTML;
+                manualBtnQr.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
+                try {
+                    await ShopCheckout.requestVerification(orderData.order_number, 'qr_scanned');
+                    const statusEl = document.getElementById('paymentStatus');
+                    if (statusEl) {
+                        statusEl.innerHTML = `
+                            <i class="fas fa-shield-alt" style="color: var(--primary-color);"></i>
+                            <p style="color: var(--primary-color);">Sedang diverifikasi oleh kasir/manager...</p>
+                        `;
+                    }
+                    manualBtnQr.innerHTML = '<i class="fas fa-hourglass-half"></i> Sedang diverifikasi';
+                } catch (e) {
+                    manualBtnQr.innerHTML = original;
+                    manualBtnQr.disabled = false;
+                    Utils.showToast('Gagal mengirim verifikasi', 'error');
+                    return;
+                }
+            };
+        }
+
+        // Bind tombol copy order number & share WhatsApp (QRIS)
+        const copyQr = document.getElementById('copyOrderBtnQr');
+        if (copyQr) {
+            copyQr.onclick = async () => {
+                try {
+                    await navigator.clipboard.writeText(orderData.order_number);
+                    Utils.showAdvancedToast('Order number disalin', 'success', 'copy');
+                } catch (e) {
+                    Utils.showToast('Gagal menyalin order number', 'error');
+                }
+            };
+        }
+        const shareQr = document.getElementById('shareWhatsAppBtnQr');
+        if (shareQr) {
+            shareQr.onclick = () => {
+                const itemsList = (orderData.items || []).map(it => `${it.product_name || it.name} x ${it.quantity}`).join('\n');
+                const msg = `Pesanan Baru ByteBalok\nNo: ${orderData.order_number}\nTotal: ${Utils.formatCurrency(orderData.total_amount)}\n${itemsList ? 'Items:\n' + itemsList + '\n' : ''}Cek status: ${window.location.origin}/shop/order-status.php?code=${orderData.order_number}`;
+                const url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+                window.open(url, '_blank');
+            };
+        }
+
+        // Initial CTA gating for QRIS (share hidden until paid)
+        ShopCheckout.setCTAs(false);
 
         // Start checking payment status
         ShopCheckout.checkPaymentStatus(orderData.order_number);
@@ -1013,13 +1271,71 @@ const ShopCheckout = {
         setText('virtualAccount', paymentInfo.virtual_account);
         setText('referenceNumber', paymentInfo.reference_number);
         setText('transferInstructions', paymentInfo.instructions);
+
+        // Optional: countdown untuk TRANSFER jika gateway menyediakan expired_at
+        const transferExpiredAt = paymentInfo.expired_at;
+        const transferExpiryEl = document.getElementById('transferExpiry');
+        if (transferExpiredAt && transferExpiryEl) {
+            ShopCheckout.startExpiryCountdown(transferExpiredAt, 'transferExpiry');
+        } else if (transferExpiryEl) {
+            transferExpiryEl.textContent = '-';
+        }
+
+        // Bind verification request button for transfer
+        const manualBtnTf = document.getElementById('manualPaidBtnTransfer');
+        if (manualBtnTf) {
+            manualBtnTf.onclick = async () => {
+                manualBtnTf.disabled = true;
+                const original = manualBtnTf.innerHTML;
+                manualBtnTf.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
+                try {
+                    await ShopCheckout.requestVerification(orderData.order_number, 'transfer_received');
+                    const statusElT = document.getElementById('paymentStatusTransfer');
+                    if (statusElT) {
+                        statusElT.innerHTML = `
+                            <i class="fas fa-shield-alt" style="color: var(--primary-color);"></i>
+                            <p style="color: var(--primary-color);">Sedang diverifikasi oleh kasir/manager...</p>
+                        `;
+                    }
+                    manualBtnTf.innerHTML = '<i class="fas fa-hourglass-half"></i> Sedang diverifikasi';
+                } catch (e) {
+                    manualBtnTf.innerHTML = original;
+                    manualBtnTf.disabled = false;
+                    Utils.showToast('Gagal mengirim verifikasi', 'error');
+                    return;
+                }
+            };
+        }
+
+        // Bind tombol copy order number & share WhatsApp (Transfer)
+        const copyTf = document.getElementById('copyOrderBtnTransfer');
+        if (copyTf) {
+            copyTf.onclick = async () => {
+                try {
+                    await navigator.clipboard.writeText(orderData.order_number);
+                    Utils.showAdvancedToast('Order number disalin', 'success', 'copy');
+                } catch (e) {
+                    Utils.showToast('Gagal menyalin order number', 'error');
+                }
+            };
+        }
+        const shareTf = document.getElementById('shareWhatsAppBtnTransfer');
+        if (shareTf) {
+            shareTf.onclick = () => {
+                const itemsList = (orderData.items || []).map(it => `${it.product_name || it.name} x ${it.quantity}`).join('\n');
+                const msg = `Pesanan Baru ByteBalok\nNo: ${orderData.order_number}\nTotal: ${Utils.formatCurrency(orderData.total_amount)}\n${itemsList ? 'Items:\n' + itemsList + '\n' : ''}Cek status: ${window.location.origin}/shop/order-status.php?code=${orderData.order_number}`;
+                const url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+                window.open(url, '_blank');
+            };
+        }
+
+        // Mulai cek status pembayaran
+        ShopCheckout.checkPaymentStatus(orderData.order_number);
+
+        // Initial CTA gating for Transfer (share hidden until paid)
+        ShopCheckout.setCTAs(false);
     },
 
-    showCODPayment: (orderData) => {
-        const codSection = document.getElementById('codPayment');
-        codSection.style.display = 'block';
-        document.getElementById('codAmount').textContent = Utils.formatCurrency(orderData.total_amount);
-    },
 
     simulatePayment: async (orderNumber) => {
         try {
@@ -1045,12 +1361,58 @@ const ShopCheckout = {
         const checkStatus = async () => {
             try {
                 const response = await Utils.apiCall(`?controller=payment&action=check-status&order_number=${orderNumber}`);
-                
-                if (response.data && response.data.payment_status === 'paid') {
-                    document.getElementById('paymentStatus').innerHTML = `
-                        <i class="fas fa-check-circle" style="color: var(--secondary-color);"></i>
-                        <p style="color: var(--secondary-color);">Payment Confirmed!</p>
-                    `;
+                const data = response.data || {};
+
+                // Optional intermediate signals for cashier awareness
+                // Show when QR is scanned (if gateway provides flag)
+                if ((ShopCheckout.currentOrderData?.payment_method === 'qris') && (data.qr_scanned === true)) {
+                    const statusEl = document.getElementById('paymentStatus');
+                    if (statusEl) {
+                        statusEl.innerHTML = `
+                            <i class="fas fa-mobile-alt" style="color: var(--primary-color);"></i>
+                            <p style="color: var(--primary-color);">QR telah di-scan, menunggu konfirmasi pembayaran...</p>
+                        `;
+                    }
+                }
+
+                // Show when transfer has been received by bank but not yet confirmed
+                if ((ShopCheckout.currentOrderData?.payment_method === 'transfer') && (data.transfer_received === true || data.transfer_status === 'received')) {
+                    const statusElT = document.getElementById('paymentStatusTransfer');
+                    if (statusElT) {
+                        statusElT.innerHTML = `
+                            <i class="fas fa-university" style="color: var(--primary-color);"></i>
+                            <p style="color: var(--primary-color);">Transfer terdeteksi, menunggu verifikasi sistem...</p>
+                        `;
+                    }
+                }
+
+                if (data && data.order_status === 'cancelled') {
+                    if (ShopCheckout.expiryTimer) clearInterval(ShopCheckout.expiryTimer);
+                    if (ShopCheckout.statusPollTimer) clearTimeout(ShopCheckout.statusPollTimer);
+                    ShopCheckout.showCancelledSection(orderNumber, 'Pesanan dibatalkan');
+                    return;
+                }
+
+                if (data && data.payment_status === 'paid') {
+                    const statusEl = (ShopCheckout.currentOrderData?.payment_method === 'transfer') 
+                        ? document.getElementById('paymentStatusTransfer') 
+                        : document.getElementById('paymentStatus');
+                    if (statusEl) {
+                        statusEl.innerHTML = `
+                            <i class="fas fa-check-circle" style="color: var(--secondary-color);"></i>
+                            <p style="color: var(--secondary-color);">Pembayaran terkonfirmasi!</p>
+                        `;
+                    }
+                    if (ShopCheckout.expiryTimer) clearInterval(ShopCheckout.expiryTimer);
+                    if (ShopCheckout.statusPollTimer) clearTimeout(ShopCheckout.statusPollTimer);
+
+                    // Auto redirect ke halaman pelacakan order
+                    const ord = ShopCheckout.currentOrderData?.order_number || orderNumber;
+                    const url = `order-status.php?code=${ord}`;
+                    setTimeout(() => { window.location.href = url; }, 1500);
+
+                    // Enable CTAs (share becomes visible)
+                    ShopCheckout.setCTAs(true);
                     return; // Stop checking
                 }
             } catch (error) {
@@ -1058,10 +1420,144 @@ const ShopCheckout = {
             }
 
             // Check again after 5 seconds
-            setTimeout(checkStatus, 5000);
+            ShopCheckout.statusPollTimer = setTimeout(checkStatus, 5000);
         };
 
         checkStatus();
+    },
+
+    cancelOrder: async (orderNumber, reason = 'buyer_cancel') => {
+        try {
+            const res = await Utils.apiCall('?controller=order&action=cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_number: orderNumber, reason })
+            });
+            if (res && res.success) {
+                if (ShopCheckout.expiryTimer) clearInterval(ShopCheckout.expiryTimer);
+                if (ShopCheckout.statusPollTimer) clearTimeout(ShopCheckout.statusPollTimer);
+                ShopCheckout.showCancelledSection(orderNumber, 'Pesanan dibatalkan oleh pembeli');
+                Utils.showAdvancedToast('Pesanan dibatalkan', 'warning', 'ban');
+            } else {
+                Utils.showToast(res?.error || 'Gagal membatalkan pesanan', 'error');
+            }
+        } catch (e) {
+            Utils.showToast('Gagal membatalkan pesanan: ' + (e?.message || 'Unknown'), 'error');
+        }
+    },
+
+    showCancelledSection: (orderNumber, message) => {
+        const paymentSection = document.getElementById('paymentSection');
+        if (paymentSection) paymentSection.style.display = 'none';
+        const cancelled = document.getElementById('orderCancelled');
+        if (cancelled) cancelled.style.display = 'block';
+        const num = document.getElementById('cancelledOrderNumber');
+        if (num) num.textContent = orderNumber;
+        const reason = document.getElementById('cancelledReason');
+        if (reason) reason.textContent = message || 'Pesanan dibatalkan.';
+        const track = document.getElementById('trackOrderLinkCancelled');
+        if (track) track.href = `order-status.php?code=${orderNumber}`;
+    },
+
+    // Manual confirm paid (cashier/user clicks)
+    manualConfirmPaid: async (orderNumber) => {
+        try {
+            const res = await Utils.apiCall('?controller=payment&action=manualUpdate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_number: orderNumber, confirm_paid: true })
+            });
+
+            if (res && res.success) {
+                Utils.showAdvancedToast('Pembayaran dikonfirmasi secara manual', 'success', 'check-circle');
+                const statusEl = (ShopCheckout.currentOrderData?.payment_method === 'transfer') 
+                    ? document.getElementById('paymentStatusTransfer') 
+                    : document.getElementById('paymentStatus');
+                if (statusEl) {
+                    statusEl.innerHTML = `
+                        <i class="fas fa-check-circle" style="color: var(--secondary-color);"></i>
+                        <p style="color: var(--secondary-color);">Pembayaran terkonfirmasi!</p>
+                    `;
+                }
+
+                // Stop timers and redirect to tracking
+                if (ShopCheckout.expiryTimer) clearInterval(ShopCheckout.expiryTimer);
+                if (ShopCheckout.statusPollTimer) clearTimeout(ShopCheckout.statusPollTimer);
+                const ord = orderNumber;
+                const url = `order-status.php?code=${ord}`;
+                setTimeout(() => { window.location.href = url; }, 1200);
+
+                // Enable CTAs (share becomes visible)
+                ShopCheckout.setCTAs(true);
+            } else {
+                Utils.showToast(res?.error || 'Gagal konfirmasi manual', 'error');
+            }
+        } catch (e) {
+            Utils.showToast('Gagal konfirmasi manual: ' + (e?.message || 'Unknown'), 'error');
+        }
+    },
+
+    // Buyer-side: request manual verification (sets intermediate flag only)
+    requestVerification: async (orderNumber, flag = 'qr_scanned') => {
+        try {
+            const res = await Utils.apiCall('?controller=payment&action=manualUpdate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_number: orderNumber, flag })
+            });
+            if (res && res.success) {
+                Utils.showAdvancedToast('Permintaan verifikasi dikirim', 'info', 'shield-alt');
+                return true;
+            }
+            throw new Error(res?.message || 'manualUpdate failed');
+        } catch (e) {
+            throw e;
+        }
+    },
+
+    // Countdown kedaluwarsa (QRIS/TRANSFER jika tersedia)
+    startExpiryCountdown: (expiredAt, elementId) => {
+        try {
+            if (ShopCheckout.expiryTimer) clearInterval(ShopCheckout.expiryTimer);
+            const el = document.getElementById(elementId);
+            if (!el || !expiredAt) return;
+
+            const target = new Date(expiredAt).getTime();
+
+            const format = (ms) => {
+                const totalSeconds = Math.floor(ms / 1000);
+                const h = Math.floor(totalSeconds / 3600);
+                const m = Math.floor((totalSeconds % 3600) / 60);
+                const s = totalSeconds % 60;
+                const hPrefix = h > 0 ? String(h).padStart(2, '0') + ':' : '';
+                return `${hPrefix}${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            };
+
+            const tick = () => {
+                const now = Date.now();
+                const diff = Math.max(0, target - now);
+                if (diff <= 0) {
+                    el.textContent = 'QR telah kedaluwarsa';
+                    const statusEl = (ShopCheckout.currentOrderData?.payment_method === 'transfer') 
+                        ? document.getElementById('paymentStatusTransfer') 
+                        : document.getElementById('paymentStatus');
+                    if (statusEl) {
+                        statusEl.innerHTML = `
+                            <i class="fas fa-exclamation-circle" style="color: var(--accent-color);"></i>
+                            <p style="color: var(--accent-color);">Kode pembayaran kedaluwarsa. Silakan buat order baru.</p>`;
+                    }
+                    if (ShopCheckout.statusPollTimer) clearTimeout(ShopCheckout.statusPollTimer);
+                    clearInterval(ShopCheckout.expiryTimer);
+                    return;
+                }
+                el.textContent = `QR Code kedaluwarsa dalam ${format(diff)}`;
+            };
+
+            tick();
+            ShopCheckout.expiryTimer = setInterval(tick, 1000);
+        } catch (err) {
+            console.warn('Countdown error:', err);
+        }
     }
 };
 
@@ -1071,13 +1567,12 @@ const ShopOrderTracking = {
         ShopOrderTracking.setupEventListeners();
         ShopCart.updateCartCount();
 
-        // Check URL parameters
+        // Check URL parameters (order number only)
         const params = new URLSearchParams(window.location.search);
         const orderNumber = params.get('order_number');
-        const email = params.get('email');
 
-        if (orderNumber && email) {
-            ShopOrderTracking.trackOrder(orderNumber, email);
+        if (orderNumber) {
+            ShopOrderTracking.trackOrder(orderNumber);
         }
     },
 
@@ -1087,8 +1582,7 @@ const ShopOrderTracking = {
             trackForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 const orderNumber = document.getElementById('orderNumber').value;
-                const email = document.getElementById('emailAddress').value;
-                ShopOrderTracking.trackOrder(orderNumber, email);
+                ShopOrderTracking.trackOrder(orderNumber);
             });
         }
 
@@ -1101,15 +1595,15 @@ const ShopOrderTracking = {
         }
     },
 
-    trackOrder: async (orderNumber, email) => {
+    trackOrder: async (orderNumber) => {
         try {
-            const response = await Utils.apiCall(`?controller=order&action=get&order_number=${orderNumber}&email=${email}`);
+            const response = await Utils.apiCall(`?controller=order&action=get-by-number&order_number=${orderNumber}`);
             
             if (response.success) {
                 ShopOrderTracking.displayOrderDetails(response.data);
             }
         } catch (error) {
-            Utils.showToast('Order not found or email mismatch', 'error');
+            Utils.showToast('Order tidak ditemukan', 'error');
         }
     },
 
@@ -1220,13 +1714,28 @@ const setupTrackOrderModal = () => {
     trackForm?.addEventListener('submit', (e) => {
         e.preventDefault();
         const orderNumber = document.getElementById('trackOrderNumber').value;
-        const email = document.getElementById('trackEmail').value;
-        window.location.href = `order-status.php?order_number=${orderNumber}&email=${email}`;
+        window.location.href = `order-status.php?code=${orderNumber}`;
     });
 };
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
+    // Reset local cart if PHP session has changed (first visit/new session)
+    try {
+        const sidMeta = document.querySelector('meta[name="php-session-id"]');
+        const currentSid = sidMeta ? sidMeta.content : null;
+        const storedSid = localStorage.getItem('bytebalok_cart_session');
+        if (currentSid && storedSid !== currentSid) {
+            localStorage.removeItem(STORAGE_KEY);
+            // Pastikan data pelanggan sebelumnya tidak ikut terisi otomatis
+            localStorage.removeItem('checkout_name');
+            localStorage.removeItem('checkout_email');
+            localStorage.removeItem('checkout_phone');
+            localStorage.removeItem('checkout_address');
+            localStorage.setItem('bytebalok_cart_session', currentSid);
+        }
+    } catch (e) { /* ignore */ }
+
     // Update cart count everywhere
     ShopCart.updateCartCount();
 
@@ -1268,7 +1777,15 @@ document.addEventListener('DOMContentLoaded', () => {
     ShopProduct.setupModalListeners();
 
     // Initialize based on current page
-    if (window.location.pathname.includes('index.php') || window.location.pathname.endsWith('/shop/')) {
+    const path = window.location.pathname || '';
+    const onShopPage = (
+        path.includes('index.php') ||
+        path.endsWith('/shop/') ||
+        path.endsWith('/shop')
+    );
+    if (onShopPage) {
+        // Attach listeners early to avoid missing clicks
+        try { ShopCatalog.setupEventListeners(); } catch (e) { /* no-op */ }
         ShopCatalog.initialize();
     } else if (window.location.pathname.includes('cart.php')) {
         ShopCart.loadCart();
@@ -1454,7 +1971,7 @@ const WhatsAppShare = {
             message += `${index + 1}. ${name} x${qty} - ${Utils.formatCurrency(unit * qty)}\n`;
         });
 
-        const trackUrl = `${window.location.origin}/shop/order-status.php?order_number=${encodeURIComponent(orderNumber)}${orderData.customer_email ? `&email=${encodeURIComponent(orderData.customer_email)}` : ''}`;
+    const trackUrl = `${window.location.origin}/shop/order-status.php?code=${encodeURIComponent(orderNumber)}`;
         message += `\n✅ Thank you for shopping with Bytebalok!`;
         message += `\n🔗 Track your order: ${trackUrl}`;
 
@@ -1466,7 +1983,7 @@ const WhatsAppShare = {
         message += `Order #${orderNumber}\n`;
         message += `Status: *${status.toUpperCase()}*\n`;
         message += `Total: ${Utils.formatCurrency(total)}\n\n`;
-        message += `Track: ${window.location.origin}/shop/order-status.php?order_number=${orderNumber}`;
+        message += `Track: ${window.location.origin}/shop/order-status.php?code=${orderNumber}`;
         
         const encodedMessage = encodeURIComponent(message);
         const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;

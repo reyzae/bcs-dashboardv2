@@ -6,11 +6,11 @@
 ?>
 
 <!-- Period Filter -->
-<div style="margin-bottom: 1.5rem; padding: 1rem; background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
-    <span style="font-weight: 600; color: #374151; font-size: 0.875rem; display: flex; align-items: center; gap: 0.5rem;">
+<div class="filter-bar">
+    <span class="filter-label">
         <i class="fas fa-filter"></i> Filter Period:
     </span>
-    <select id="periodFilter" class="form-select" style="padding: 0.5rem 0.75rem; border: 2px solid #e5e7eb; border-radius: 20px; font-size: 0.875rem; min-width: 200px; cursor: pointer;">
+    <select id="periodFilter" class="filter-select">
         <option value="today">📅 Today</option>
         <option value="week">📅 This Week</option>
         <option value="month" selected>📅 This Month</option>
@@ -21,18 +21,20 @@
     
     <!-- Custom Date Range (Hidden by default) -->
     <div id="customDateRange" style="display: none; gap: 0.75rem; align-items: center; flex-wrap: wrap; flex: 1;">
-        <input type="date" id="dateFrom" style="padding: 0.5rem 0.75rem; border: 2px solid #e5e7eb; border-radius: 20px; font-size: 0.875rem;">
-        <span style="color: #6b7280; font-weight: 500;">to</span>
-        <input type="date" id="dateTo" style="padding: 0.5rem 0.75rem; border: 2px solid #e5e7eb; border-radius: 20px; font-size: 0.875rem;">
-        <button class="btn btn-primary btn-sm" onclick="applyCustomDateRange()" style="border-radius: 20px; padding: 0.5rem 1rem; font-size: 0.875rem; cursor: pointer;">
-            <i class="fas fa-check"></i> Apply
-        </button>
+        <input type="date" id="dateFrom" class="date-input">
+        <span class="text-muted" style="font-weight: 500;">to</span>
+        <input type="date" id="dateTo" class="date-input">
+        <div class="filter-actions">
+            <button class="btn btn-primary btn-sm" onclick="applyCustomDateRange()">
+                <i class="fas fa-check"></i> Apply
+            </button>
+        </div>
     </div>
 </div>
 
 <!-- Admin Dashboard Stats -->
 <div class="stats-grid" id="statsGrid">
-    <div class="stat-card stat-primary">
+    <div class="stat-card stat-primary stat-card--compact">
         <div class="stat-icon">
             <i class="fas fa-dollar-sign"></i>
         </div>
@@ -46,7 +48,7 @@
         </div>
     </div>
 
-    <div class="stat-card stat-success">
+    <div class="stat-card stat-success stat-card--compact">
         <div class="stat-icon">
             <i class="fas fa-receipt"></i>
         </div>
@@ -60,7 +62,7 @@
         </div>
     </div>
 
-    <div class="stat-card stat-info">
+    <div class="stat-card stat-info stat-card--compact">
         <div class="stat-icon">
             <i class="fas fa-users"></i>
         </div>
@@ -74,7 +76,7 @@
         </div>
     </div>
 
-    <div class="stat-card stat-warning">
+    <div class="stat-card stat-warning stat-card--compact">
         <div class="stat-icon">
             <i class="fas fa-exclamation-triangle"></i>
         </div>
@@ -458,17 +460,27 @@ function animateCounter(elementId, target, isCurrency = false) {
 
 async function loadSalesChart(days) {
     try {
-        // Build date range for last N days
-        const endDate = new Date().toISOString().split('T')[0];
-        const start = new Date();
-        start.setDate(start.getDate() - Number(days));
-        const startDate = start.toISOString().split('T')[0];
-
-        const url = `/api.php?controller=transaction&action=daily-sales&start_date=${startDate}&end_date=${endDate}`;
+        const url = `/api.php?controller=dashboard&action=salesChart&days=${Number(days) || 30}`;
         const response = await fetch(url);
         const data = await response.json();
         if (data.success) {
-            renderSalesChart({ labels: data.data.labels, sales: data.data.sales });
+            const labels = Array.isArray(data.data?.labels) ? data.data.labels : [];
+            const sales = Array.isArray(data.data?.sales) ? data.data.sales : [];
+            // Fallback: generate zero data if API returns empty
+            if (!labels.length) {
+                const today = new Date();
+                const filler = [];
+                const fillerLabels = [];
+                for (let i = Number(days) - 1; i >= 0; i--) {
+                    const d = new Date(today);
+                    d.setDate(today.getDate() - i);
+                    fillerLabels.push(d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }));
+                    filler.push(0);
+                }
+                renderSalesChart({ labels: fillerLabels, sales: filler });
+            } else {
+                renderSalesChart({ labels, sales });
+            }
         }
     } catch (error) {
         console.error('Error loading sales chart:', error);
@@ -477,10 +489,30 @@ async function loadSalesChart(days) {
 
 async function loadPaymentMethodsChart(period = null, customRange = null) {
     try {
-        const response = await fetch(`/api.php?controller=dashboard&action=paymentMethods`);
+        let url = `/api.php?controller=dashboard&action=paymentMethods`;
+        if (customRange && customRange.from && customRange.to) {
+            url += `&period=custom&from=${customRange.from}&to=${customRange.to}`;
+        } else if (period) {
+            url += `&period=${period}`;
+        }
+        const response = await fetch(url);
         const data = await response.json();
         if (data.success) {
-            renderPaymentChart(data.data);
+            const d = data.data || {};
+            // Filter hanya Cash, Qris, Transfer
+            const allow = new Set(['Cash','Qris','Transfer']);
+            const labels = (Array.isArray(d.labels) ? d.labels : []).filter(l => allow.has(l));
+            const values = Array.isArray(d.values) ? d.values : [];
+            const counts = Array.isArray(d.counts) ? d.counts : [];
+            if (!labels.length) {
+                renderPaymentChart({ labels: ['Cash','Qris','Transfer'], values: [0,0,0], counts: [0,0,0] });
+            } else {
+                // Align values/counts to filtered labels order
+                const mapIndex = (Array.isArray(d.labels) ? d.labels : []).reduce((acc, lbl, idx) => { acc[lbl] = idx; return acc; }, {});
+                const alignedValues = labels.map(lbl => values[mapIndex[lbl]] ?? 0);
+                const alignedCounts = labels.map(lbl => counts[mapIndex[lbl]] ?? 0);
+                renderPaymentChart({ labels, values: alignedValues, counts: alignedCounts });
+            }
         }
     } catch (error) {
         console.error('Error loading payment chart:', error);
@@ -585,10 +617,15 @@ async function loadRecentTransactions() {
 
 async function loadLowStockProducts() {
     try {
-        const response = await fetch('/api.php?controller=product&action=getLowStock');
-    const data = await response.json();
-    
-    if (data.success && data.data.products.length > 0) {
+        const response = await fetch('/api.php?controller=product&action=getLowStock&limit=10');
+        const data = await response.json();
+
+        // Handle kedua format respons: data.data.products atau data.data (array langsung)
+        const products = (data && data.success && data.data)
+            ? (data.data.products || data.data || [])
+            : [];
+
+        if (Array.isArray(products) && products.length > 0) {
         const html = `
             <table class="table table-hover">
                 <thead>
@@ -601,7 +638,7 @@ async function loadLowStockProducts() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${data.data.products.map(product => `
+                    ${products.map(product => `
                         <tr>
                             <td>
                                 <div class="product-info">
@@ -626,11 +663,22 @@ async function loadLowStockProducts() {
                 </tbody>
             </table>
         `;
-        document.getElementById('lowStockList').innerHTML = html;
-        document.getElementById('lowStockCard').style.display = 'block';
-    }
+        const listEl = document.getElementById('lowStockList');
+        const cardEl = document.getElementById('lowStockCard');
+        if (listEl) listEl.innerHTML = html;
+        if (cardEl) cardEl.style.display = 'block';
+        } else {
+            const listEl = document.getElementById('lowStockList');
+            const cardEl = document.getElementById('lowStockCard');
+            if (listEl) {
+                listEl.innerHTML = '<p class="text-success text-center">All products in stock</p>';
+            }
+            if (cardEl) cardEl.style.display = 'none';
+        }
     } catch (error) {
         console.error('Error loading low stock products:', error);
+        const listEl = document.getElementById('lowStockList');
+        if (listEl) listEl.innerHTML = '<p class="text-danger text-center">Failed to load low stock products</p>';
     }
 }
 
@@ -789,10 +837,8 @@ function renderPaymentChart(data) {
     // Define colors for payment methods
     const colors = {
         'Cash': '#28a745',
-        'Card': '#007bff',
         'Qris': '#17a2b8',
-        'Transfer': '#ffc107',
-        'E-wallet': '#6f42c1'
+        'Transfer': '#ffc107'
     };
     
     const backgroundColors = (data.labels || []).map(label => 
@@ -869,156 +915,4 @@ function showToast(message, type = 'info') {
     }
 }
 </script>
-
-<style>
-/* Admin Dashboard Specific Styles */
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 24px;
-    margin-bottom: 32px;
-}
-
-.stat-card {
-    background: white;
-    border-radius: 12px;
-    padding: 24px;
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.stat-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-}
-
-.stat-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-    flex-shrink: 0;
-}
-
-.stat-primary .stat-icon { background: #e3f2fd; color: #1976d2; }
-.stat-success .stat-icon { background: #e8f5e9; color: #388e3c; }
-.stat-info .stat-icon { background: #e1f5fe; color: #0288d1; }
-.stat-warning .stat-icon { background: #fff3e0; color: #f57c00; }
-
-.stat-details {
-    flex: 1;
-    min-width: 0;
-}
-
-.stat-label {
-    font-size: 13px;
-    color: #666;
-    margin-bottom: 8px;
-    font-weight: 500;
-}
-
-.stat-value {
-    font-size: 28px;
-    font-weight: 700;
-    color: #333;
-    margin-bottom: 4px;
-}
-
-.stat-change {
-    font-size: 13px;
-    color: #666;
-}
-
-.stat-change.stat-positive { color: #388e3c; }
-.stat-change.stat-negative { color: #d32f2f; }
-
-.stat-link {
-    color: #1976d2;
-    text-decoration: none;
-    font-weight: 500;
-}
-
-.stat-link:hover {
-    text-decoration: underline;
-}
-
-.product-rank {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 14px;
-}
-
-.product-name {
-    font-weight: 600;
-    color: #333;
-    margin-bottom: 4px;
-}
-
-.product-stats {
-    font-size: 13px;
-    color: #666;
-}
-
-.activity-list {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-.activity-item {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-}
-
-.activity-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.activity-info { background: #e3f2fd; color: #1976d2; }
-.activity-success { background: #e8f5e9; color: #388e3c; }
-.activity-warning { background: #fff3e0; color: #f57c00; }
-.activity-error { background: #ffebee; color: #d32f2f; }
-
-.activity-text {
-    font-size: 14px;
-    color: #333;
-    margin-bottom: 4px;
-}
-
-.activity-time {
-    font-size: 12px;
-    color: #999;
-}
-
-.list-group-item {
-    border: 1px solid #e9ecef;
-    padding: 16px;
-    margin-bottom: 8px;
-    border-radius: 8px;
-}
-
-.list-group-item:hover {
-    background: #f8f9fa;
-}
-</style>
 

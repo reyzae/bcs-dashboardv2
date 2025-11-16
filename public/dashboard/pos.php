@@ -17,6 +17,7 @@ require_once '../bootstrap.php';
 require_once '../../app/helpers/functions.php';
 
 // Require authentication and role check - Staff NOT allowed
+requireAuth();
 requireRole(['admin', 'manager', 'cashier']);
 
 // Get user info
@@ -79,9 +80,13 @@ if (!isset($_SESSION['user_role'])) {
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <a href="index.php" class="sidebar-logo">
-                    <img src="../assets/img/logo.svg" alt="Bytebalok" class="logo-img">
+                    <img src="../assets/img/logo.svg" alt="Bytebalok" class="logo-img" style="height:40px; width:auto; object-fit:contain;">
                     <h1>Bytebalok</h1>
                 </a>
+                <!-- Mobile Close Button -->
+                <button class="sidebar-close" id="sidebarClose" aria-label="Close Sidebar">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
             
             <!-- Role Badge -->
@@ -125,6 +130,8 @@ if (!isset($_SESSION['user_role'])) {
                 </div>
             </nav>
         </aside>
+        <!-- Overlay for mobile/tablet to close sidebar when clicking outside -->
+        <div id="sidebarOverlay" class="sidebar-overlay"></div>
 
         <!-- Main Content -->
         <main class="main-content pos-main">
@@ -135,7 +142,7 @@ if (!isset($_SESSION['user_role'])) {
                         <i class="fas fa-bars"></i>
                     </button>
                     <div class="pos-branding">
-                        <img src="../assets/img/logo.svg" alt="Bytebalok" class="logo-img">
+                        <img src="../assets/img/logo.svg" alt="Bytebalok" class="logo-img" style="height:24px; width:auto; object-fit:contain;">
                         <h1>POS</h1>
                     </div>
                     <div class="header-stats">
@@ -389,6 +396,9 @@ if (!isset($_SESSION['user_role'])) {
                                 step="1000"
                             >
                             </div>
+                            <div id="nonCashNote" class="non-cash-note" style="display: none; font-size: 12px; color: #6b7280; margin-top: 6px;">
+                                Nominal mengikuti total. Kolom ini otomatis untuk QRIS/Transfer.
+                            </div>
                         </div>
                         
                         <div class="change-display" id="changeAmount" style="display: none;">
@@ -600,36 +610,14 @@ if (!isset($_SESSION['user_role'])) {
             // Load tax settings from database
             loadTaxSettings();
             
-            // Ensure sidebar behavior: force expanded ONLY on desktop (>=1025px)
+            // Rely on global app.js + responsive.css for sidebar behavior.
+            // Remove any legacy classes in case they were persisted.
             const sidebar = document.getElementById('sidebar');
             if (sidebar) {
-                const isDesktop = window.innerWidth >= 1025;
-                // Clean up any collapsed states
-                sidebar.classList.remove('collapsed', 'minimized', 'hidden');
-                
-                if (isDesktop) {
-                    // Desktop: keep it visible and full width
-                    sidebar.classList.add('expanded', 'visible');
-                    sidebar.style.width = '280px';
-                    sidebar.style.transform = 'translateX(0)';
-                    sidebar.style.display = 'block';
-                    
-                    // Ensure text labels visible
-                    const navSpans = sidebar.querySelectorAll('.nav-link span, .sidebar-logo h1');
-                    navSpans.forEach(span => {
-                        span.style.display = 'inline';
-                        span.style.opacity = '1';
-                        span.style.visibility = 'visible';
-                    });
-                    console.log('✅ Sidebar set to full width (desktop)');
-                } else {
-                    // Tablet/mobile: rely on toggle; avoid forcing open to prevent overlap
-                    sidebar.classList.remove('expanded');
-                    sidebar.style.removeProperty('width');
-                    sidebar.style.removeProperty('transform');
-                    sidebar.style.removeProperty('display');
-                    console.log('ℹ️ Sidebar uses toggle behavior (tablet/mobile)');
-                }
+                sidebar.classList.remove('collapsed', 'minimized', 'hidden', 'expanded', 'visible');
+                sidebar.style.removeProperty('width');
+                sidebar.style.removeProperty('transform');
+                sidebar.style.removeProperty('display');
             }
             
             // User menu toggle
@@ -815,6 +803,43 @@ if (!isset($_SESSION['user_role'])) {
                 }
             }
         }
+    </script>
+    <script>
+    (function() {
+        'use strict';
+        function forceNavigation() {
+            const links = document.querySelectorAll('.sidebar a, .sidebar .nav-link, a.nav-link');
+            if (links.length === 0) {
+                setTimeout(forceNavigation, 300);
+                return;
+            }
+            links.forEach(function(link) {
+                const href = link.getAttribute('href');
+                if (!href || href === '#' || href.startsWith('javascript:')) {
+                    return;
+                }
+                const newLink = link.cloneNode(true);
+                link.parentNode.replaceChild(newLink, link);
+                newLink.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    const target = this.getAttribute('href');
+                    const sidebar = document.getElementById('sidebar');
+                    if (sidebar) sidebar.classList.remove('open');
+                    window.location.href = target;
+                    return false;
+                }, true);
+            });
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                setTimeout(forceNavigation, 100);
+            });
+        } else {
+            setTimeout(forceNavigation, 100);
+        }
+    })();
     </script>
 </body>
 </html>

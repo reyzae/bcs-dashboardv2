@@ -89,6 +89,23 @@ class Logger {
      */
     private function log($level, $message, $context = []) {
         try {
+            // Rotate log file if oversized (5MB)
+            $maxSize = 5 * 1024 * 1024;
+            if (file_exists($this->logFile) && filesize($this->logFile) >= $maxSize) {
+                $timestamp = date('Ymd_His');
+                $rotated = $this->logFile . '.' . $timestamp;
+                @rename($this->logFile, $rotated);
+                // Keep only last 3 rotated files
+                $pattern = $this->logFile . '.*';
+                $files = glob($pattern);
+                if ($files && count($files) > 3) {
+                    // Sort by modification time ascending and delete oldest
+                    usort($files, function($a, $b) { return filemtime($a) <=> filemtime($b); });
+                    foreach (array_slice($files, 0, count($files) - 3) as $old) {
+                        @unlink($old);
+                    }
+                }
+            }
             $timestamp = date('Y-m-d H:i:s');
             $userId = $_SESSION['user_id'] ?? 'guest';
             $contextStr = !empty($context) ? ' | Context: ' . json_encode($context) : '';

@@ -25,6 +25,7 @@ if (isset($_SESSION['user_id'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Bytebalok Dashboard</title>
     <meta name="description" content="Login to Bytebalok Business Management System">
+    <meta name="theme-color" content="#4f46e5">
     
     <!-- Stylesheets -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -290,7 +291,7 @@ if (isset($_SESSION['user_id'])) {
                 
                 <div class="form-options">
                     <label class="checkbox-label">
-                        <input type="checkbox" id="remember">
+                        <input type="checkbox" id="remember" name="remember" value="1">
                         <span class="checkmark"></span>
                         Remember me
                     </label>
@@ -315,10 +316,8 @@ if (isset($_SESSION['user_id'])) {
         </div>
     </div>
     
-    <!-- Toast Notification -->
-    <div class="toast-container">
-        <div id="toast" class="toast"></div>
-    </div>
+    <!-- Toast Notifications (ARIA) -->
+    <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
     
     <!-- Scripts -->
     <script src="assets/js/app.js"></script>

@@ -185,6 +185,8 @@
     const USER_ROLE = '<?php echo $current_user['role']; ?>';
     const USER_ID = <?php echo $current_user['id']; ?>;
     const USER_NAME = '<?php echo $current_user['full_name']; ?>';
+    // CSRF token fallback for JS (meta tag also present)
+    window.CSRF_TOKEN = '<?php echo isset($_SESSION['csrf_token']) ? addslashes($_SESSION['csrf_token']) : ''; ?>';
 
     // Initialize on load
     document.addEventListener('DOMContentLoaded', function() {
@@ -337,10 +339,11 @@
                 countBadge.style.display = 'none';
             }
             
-            // Show toast when new notifications arrive
+            // Show toast when new notifications arrive (aggregate delta)
             if (count > lastNotificationCount) {
+                const delta = count - lastNotificationCount;
                 if (window.showToast) {
-                    window.showToast('Ada pesanan/notifikasi baru masuk', 'info');
+                    window.showToast(`Ada notifikasi baru (+${delta})`, 'info');
                 }
             }
             lastNotificationCount = count;
@@ -560,7 +563,7 @@
     }
 
     .footer-brand i {
-        color: #667eea;
+        color: var(--primary-color);
         font-size: 16px;
     }
 
@@ -622,7 +625,7 @@
     }
 
     .footer-link:hover {
-        color: #667eea;
+        color: var(--primary-color);
     }
 
     .footer-link i {

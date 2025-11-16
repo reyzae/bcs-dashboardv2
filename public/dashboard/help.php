@@ -16,6 +16,9 @@ $page_title = 'Help & Documentation';
 $hide_welcome_banner = true;
 $additional_css = [];
 
+// Aktifkan compact header untuk tampilan header yang rapi
+$header_compact = true;
+
 // Get current user
 $current_user = getCurrentUser();
 $user_role = $current_user['role'];
@@ -31,7 +34,7 @@ include __DIR__ . '/includes/header.php';
     }
 
     .help-hero {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
         color: white;
         padding: 48px;
         border-radius: 16px;
@@ -80,7 +83,7 @@ include __DIR__ . '/includes/header.php';
         right: 24px;
         top: 50%;
         transform: translateY(-50%);
-        color: #667eea;
+        color: var(--primary-color);
         font-size: 20px;
     }
 
@@ -105,14 +108,14 @@ include __DIR__ . '/includes/header.php';
     .help-category-card:hover {
         transform: translateY(-8px);
         box-shadow: 0 12px 32px rgba(102, 126, 234, 0.2);
-        border-color: #667eea;
+        border-color: var(--primary-color);
     }
 
     .help-category-card .icon {
         width: 80px;
         height: 80px;
         margin: 0 auto 24px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
         border-radius: 20px;
         display: flex;
         align-items: center;
@@ -488,6 +491,23 @@ include __DIR__ . '/includes/header.php';
 </style>
 
 <div class="help-container">
+    <!-- Page Header: Uniform Card Style -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-question-circle"></i> Help & Documentation
+            </h3>
+            <div class="card-actions action-buttons">
+                <a href="https://bytebalok.example/docs" target="_blank" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-external-link-alt"></i> Open Docs
+                </a>
+            </div>
+        </div>
+        <div class="card-body">
+            <p style="color: #6b7280; font-size: 0.875rem;">Panduan, FAQ, dan tutorial untuk menggunakan Bytebalok</p>
+        </div>
+    </div>
+
     <!-- Hero Section -->
     <div class="help-hero">
         <h1>📚 Help & Documentation Center</h1>

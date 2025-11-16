@@ -23,9 +23,38 @@ require_once __DIR__ . '/../app/helpers/SecurityMiddleware.php';
 
 // Set JSON header and CORS headers (align with api.php)
 header('Content-Type: application/json');
+// Security headers for dashboard API responses
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header("Content-Security-Policy: frame-ancestors 'self'; base-uri 'self'");
+header('Vary: Origin');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
+header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token, X-Requested-With, Authorization');
 header('Access-Control-Allow-Credentials: true');
+
+// CORS Configuration - Production/Development
+$isProduction = ($_ENV['APP_ENV'] ?? 'development') === 'production';
+if ($isProduction) {
+    $allowedOrigin = $_ENV['APP_URL'] ?? '';
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    if ($origin && parse_url($origin, PHP_URL_HOST) === parse_url($allowedOrigin, PHP_URL_HOST)) {
+        header('Access-Control-Allow-Origin: ' . $origin);
+    }
+    // Enforce origin validation in production
+    SecurityMiddleware::validateOrigin();
+} else {
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    if (!empty($origin)) {
+        header('Access-Control-Allow-Origin: ' . $origin);
+    } else {
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        if (!empty($host)) {
+            header('Access-Control-Allow-Origin: ' . $scheme . $host);
+        }
+    }
+}
 
 // Handle CORS for development
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -35,7 +64,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 // Apply security middleware
 // Production: 100 requests/minute, Development: 1000 requests/minute
-$isProduction = ($_ENV['APP_ENV'] ?? 'development') === 'production';
 $rateLimit = $isProduction ? 100 : 1000;
 SecurityMiddleware::rateLimit($rateLimit, 60);
 // DISABLED for development - causing 403 errors with localhost:3000

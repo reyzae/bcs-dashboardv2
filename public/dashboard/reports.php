@@ -29,20 +29,31 @@ $page_title = 'Reports & Analytics';
 $additional_css = [];
 $additional_js = [];
 
+// Aktifkan compact header untuk tampilan header yang rapi
+$header_compact = true;
+
 // Include header
 require_once 'includes/header.php';
 ?>
 
 <!-- Page Content -->
 <div class="content">
-    <!-- Page Header -->
-    <div style="margin-bottom: 2rem;">
-        <h1 style="font-size: 1.875rem; font-weight: 700; color: #111827; display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
-            <i class="fas fa-chart-bar" style="color: #667eea;"></i>
-            Reports & Analytics
-        </h1>
-        <p style="color: #6b7280; font-size: 0.875rem;">Generate comprehensive business reports and insights</p>
+    <!-- Page Header: Uniform Card Style -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-chart-bar"></i> Reports & Analytics
+            </h3>
+            <div class="card-actions action-buttons">
+                <button class="btn btn-info btn-sm" id="refreshReports">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
         </div>
+        <div class="card-body">
+            <p style="color: #6b7280; font-size: 0.875rem;">Generate comprehensive business reports and insights</p>
+        </div>
+    </div>
 
     <!-- Filter Chips - Modern Horizontal Layout -->
     <div style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding: 1rem; background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">

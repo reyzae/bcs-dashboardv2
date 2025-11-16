@@ -19,12 +19,31 @@ $page_title = 'Sales Reports';
 $additional_css = [];
 $additional_js = [];
 
+// Aktifkan compact header untuk tampilan header yang rapi
+$header_compact = true;
+
 // Include header
 require_once 'includes/header.php';
 ?>
 
 <!-- Page Content -->
 <div class="content">
+    <!-- Page Header: Uniform Card Style -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-chart-line"></i> Sales Reports
+            </h3>
+            <div class="card-actions action-buttons">
+                <button class="btn btn-info btn-sm" id="refreshSales">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <p style="color: #6b7280; font-size: 0.875rem;">Generate and export sales performance reports</p>
+        </div>
+    </div>
     <!-- Report Selection -->
     <div class="card" style="margin-bottom: 2rem;">
         <div class="card-header">

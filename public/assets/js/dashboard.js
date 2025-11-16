@@ -42,7 +42,7 @@ class SystemManager {
             const response = await app.apiCall('../api.php?controller=dashboard&action=stats');
             
             if (response.success) {
-                this.renderStatsCards(response.data);
+                this.renderStatsCards(response.data || {});
             }
         } catch (error) {
             console.error('Failed to load overview stats:', error);
@@ -52,48 +52,35 @@ class SystemManager {
     renderStatsCards(data) {
         const statsGrid = document.getElementById('statsGrid');
         
+        // API mengembalikan struktur flat: today_sales, total_customers, low_stock_count, sales_change
         const stats = [
             {
                 title: 'Today Sales',
-                value: app.formatCurrency(data.sales.today.amount),
+                value: app.formatCurrency((data.today_sales != null ? data.today_sales : 0)),
                 change: null,
                 icon: 'fas fa-dollar-sign',
                 color: 'success'
             },
             {
-                title: 'This Month',
-                value: app.formatCurrency(data.sales.this_month.amount),
-                change: data.sales.this_month.growth,
+                title: 'Sales Change',
+                value: app.formatNumber(0),
+                change: (data.sales_change != null ? data.sales_change : null),
                 icon: 'fas fa-chart-line',
                 color: 'primary'
             },
             {
-                title: 'Total Products',
-                value: app.formatNumber(data.products.total),
-                change: null,
-                icon: 'fas fa-box',
-                color: 'info'
-            },
-            {
                 title: 'Active Customers',
-                value: app.formatNumber(data.customers.active),
+                value: app.formatNumber((data.total_customers != null ? data.total_customers : 0)),
                 change: null,
                 icon: 'fas fa-users',
                 color: 'warning'
             },
             {
                 title: 'Low Stock Items',
-                value: app.formatNumber(data.products.low_stock),
+                value: app.formatNumber((data.low_stock_count != null ? data.low_stock_count : 0)),
                 change: null,
                 icon: 'fas fa-exclamation-triangle',
                 color: 'error'
-            },
-            {
-                title: 'Stock Value',
-                value: app.formatCurrency(data.products.stock_value),
-                change: null,
-                icon: 'fas fa-warehouse',
-                color: 'secondary'
             }
         ];
 
@@ -199,9 +186,12 @@ class SystemManager {
     }
 
     updateSalesChart(data) {
-        if (this.salesChart) {
-            this.salesChart.data.labels = data.map(item => app.formatDate(item.date, { month: 'short', day: 'numeric' }));
-            this.salesChart.data.datasets[0].data = data.map(item => item.sales);
+        if (this.salesChart && data) {
+            // Controller mengembalikan { labels:[], sales:[], transactions:[] }
+            const labels = Array.isArray(data.labels) ? data.labels : [];
+            const sales = Array.isArray(data.sales) ? data.sales : [];
+            this.salesChart.data.labels = labels;
+            this.salesChart.data.datasets[0].data = sales;
             this.salesChart.update();
         }
     }
@@ -227,19 +217,25 @@ class SystemManager {
             return;
         }
 
-        container.innerHTML = products.map((product, index) => `
+        container.innerHTML = products.map((product, index) => {
+            const name = Utils.escapeHTML(product.name || product.product_name);
+            const sku = Utils.escapeHTML(product.sku);
+            const qty = app.formatNumber(product.total_quantity);
+            const revenue = app.formatCurrency(product.total_revenue || product.total_sales);
+            return `
             <div class="top-product-item">
                 <div class="product-rank">${index + 1}</div>
                 <div class="product-info">
-                    <h4 class="product-name">${product.name || product.product_name}</h4>
-                    <p class="product-sku">${product.sku}</p>
+                    <h4 class="product-name">${name}</h4>
+                    <p class="product-sku">${sku}</p>
                 </div>
                 <div class="product-stats">
-                    <div class="product-quantity">${app.formatNumber(product.total_quantity)} sold</div>
-                    <div class="product-sales">${app.formatCurrency(product.total_revenue || product.total_sales)}</div>
+                    <div class="product-quantity">${qty} sold</div>
+                    <div class="product-sales">${revenue}</div>
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
     }
 
     async loadRecentTransactions() {
@@ -262,40 +258,52 @@ class SystemManager {
             return;
         }
 
-        tbody.innerHTML = transactions.map(transaction => `
+        tbody.innerHTML = transactions.map(transaction => {
+            const txn = Utils.escapeHTML(transaction.transaction_number);
+            const custName = Utils.escapeHTML(transaction.customer_name || 'Walk-in Customer');
+            const custPhone = transaction.customer_phone ? Utils.escapeHTML(transaction.customer_phone) : '';
+            const cashier = Utils.escapeHTML(transaction.cashier_name || transaction.user_name || '-');
+            const itemsCount = transaction.items_count || 0;
+            const amount = app.formatCurrency(transaction.total_amount);
+            const methodKey = this.normalizePaymentMethod(transaction.payment_method);
+            const methodLabel = this.formatPaymentMethod(methodKey);
+            const statusKey = Utils.escapeHTML(this.formatStatus(transaction.status));
+            const createdDate = app.formatDate(transaction.created_at);
+            const createdTime = app.formatDate(transaction.created_at, { hour: '2-digit', minute: '2-digit' });
+            return `
             <tr>
                 <td>
-                    <span class="font-medium">${transaction.transaction_number}</span>
+                    <span class="font-medium">${txn}</span>
                 </td>
                 <td>
                     <div>
-                        <div class="font-medium">${transaction.customer_name || 'Walk-in Customer'}</div>
-                        ${transaction.customer_phone ? `<div class="text-sm text-gray-500">${transaction.customer_phone}</div>` : ''}
+                        <div class="font-medium">${custName}</div>
+                        ${custPhone ? `<div class="text-sm text-gray-500">${custPhone}</div>` : ''}
                     </div>
                 </td>
                 <td>
-                    <span class="text-sm">${transaction.cashier_name || transaction.user_name || '-'}</span>
+                    <span class="text-sm">${cashier}</span>
                 </td>
                 <td class="text-center">
-                    <span class="badge">${transaction.items_count || 0}</span>
+                    <span class="badge">${itemsCount}</span>
                 </td>
                 <td>
-                    <span class="font-semibold">${app.formatCurrency(transaction.total_amount)}</span>
+                    <span class="font-semibold">${amount}</span>
                 </td>
                 <td>
-                    <span class="payment-method payment-${transaction.payment_method}">
-                        ${this.getPaymentMethodIcon(transaction.payment_method)} ${this.formatPaymentMethod(transaction.payment_method)}
+                    <span class="payment-method payment-${methodKey}">
+                        ${this.getPaymentMethodIcon(methodKey)} ${methodLabel}
                     </span>
                 </td>
                 <td>
                     <div>
-                        <div class="text-sm">${app.formatDate(transaction.created_at)}</div>
-                        <div class="text-xs text-gray-500">${app.formatDate(transaction.created_at, { hour: '2-digit', minute: '2-digit' })}</div>
+                        <div class="text-sm">${createdDate}</div>
+                        <div class="text-xs text-gray-500">${createdTime}</div>
                     </div>
                 </td>
                 <td>
-                    <span class="status-badge status-${transaction.status}">
-                        ${this.formatStatus(transaction.status)}
+                    <span class="status-badge status-${Utils.escapeHTML(transaction.status)}">
+                        ${statusKey}
                     </span>
                 </td>
                 <td>
@@ -304,16 +312,25 @@ class SystemManager {
                     </button>
                 </td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
     }
 
     async loadLowStockProducts() {
         try {
             const response = await app.apiCall('../api.php?controller=product&action=getLowStock&limit=10');
             
-            if (response.success && response.data && response.data.products && response.data.products.length > 0) {
-                this.renderLowStockProducts(response.data.products);
-                document.getElementById('lowStockCard').style.display = 'block';
+            if (response && response.success) {
+                // API saat ini mengembalikan array langsung: data = [...]
+                const products = (response.data && response.data.products)
+                    ? response.data.products
+                    : (Array.isArray(response.data) ? response.data : []);
+
+                if (products && products.length > 0) {
+                    this.renderLowStockProducts(products);
+                    const card = document.getElementById('lowStockCard');
+                    if (card) card.style.display = 'block';
+                }
             }
         } catch (error) {
             console.error('Failed to load low stock products:', error);
@@ -328,17 +345,23 @@ class SystemManager {
             return;
         }
         
-        container.innerHTML = products.map(product => `
+        container.innerHTML = products.map(product => {
+            const name = Utils.escapeHTML(product.name);
+            const sku = Utils.escapeHTML(product.sku);
+            const qty = Utils.escapeHTML(String(product.stock_quantity));
+            const unit = Utils.escapeHTML(product.unit);
+            const minLevel = Utils.escapeHTML(String(product.min_stock_level));
+            return `
             <div class="low-stock-item">
                 <div class="product-info">
-                    <h4 class="product-name">${product.name}</h4>
-                    <p class="product-sku">${product.sku}</p>
+                    <h4 class="product-name">${name}</h4>
+                    <p class="product-sku">${sku}</p>
                 </div>
                 <div class="stock-info">
                     <div class="stock-quantity ${product.stock_quantity <= 0 ? 'out-of-stock' : 'low-stock'}">
-                        ${product.stock_quantity} ${product.unit}
+                        ${qty} ${unit}
                     </div>
-                    <div class="min-stock">Min: ${product.min_stock_level}</div>
+                    <div class="min-stock">Min: ${minLevel}</div>
                 </div>
                 <div class="product-actions">
                     <button class="btn btn-sm btn-primary" onclick="restockProduct(${product.id})">
@@ -346,7 +369,8 @@ class SystemManager {
                     </button>
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
     }
 
     setupEventListeners() {
@@ -376,6 +400,12 @@ class SystemManager {
             'other': 'fas fa-question'
         };
         return `<i class="${icons[method] || icons.other}"></i>`;
+    }
+
+    normalizePaymentMethod(method) {
+        const allowed = ['cash','card','transfer','qris','other'];
+        const m = String(method || '').toLowerCase();
+        return allowed.includes(m) ? m : 'other';
     }
 
     formatPaymentMethod(method) {
