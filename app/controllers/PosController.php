@@ -301,7 +301,7 @@ class PosController extends BaseController {
                 'payment_reference' => $data['payment_reference'] ?? null,
                 'cash_received' => $cashReceived,
                 'cash_change' => $cashChange,
-                'status' => 'completed',
+                'status' => 'pending',
                 'notes' => $data['notes'] ?? null
             ];
             
@@ -381,7 +381,7 @@ class PosController extends BaseController {
             error_log('📦 Items count: ' . count($processedItems));
             
             $result = [
-                'message' => 'Transaction completed successfully',
+                'message' => 'Transaction created, awaiting payment',
                 'transaction' => $transaction,
                 'transaction_id' => $transactionId,
                 'payment_info' => $paymentInfo // Include payment info for non-cash payments
@@ -434,6 +434,41 @@ class PosController extends BaseController {
                 'timestamp' => date('Y-m-d H:i:s')
             ], JSON_PRETTY_PRINT);
             exit;
+        }
+    }
+
+    /**
+     * Confirm payment for a POS transaction
+     * POST: { transaction_id }
+     */
+    public function confirmPayment() {
+        try {
+            $this->checkAuthentication();
+            $this->checkPermission('transactions.update');
+
+            $data = $this->getRequestData();
+            $this->validateRequired($data, ['transaction_id']);
+
+            $txnId = (int)$data['transaction_id'];
+            $transaction = $this->transactionModel->find($txnId);
+            if (!$transaction) { $this->sendError('Transaction not found', 404); return; }
+
+            // Update transaction status to completed
+            $sql = "UPDATE transactions SET status = 'completed', updated_at = NOW() WHERE id = ?";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$txnId]);
+
+            // Update payment record to success if exists
+            require_once __DIR__ . '/../models/Payment.php';
+            $paymentModel = new Payment($this->pdo);
+            $payment = $paymentModel->findByOrderId($txnId);
+            if ($payment) {
+                $paymentModel->updateStatus($payment['id'], 'success', $payment['transaction_id'] ?? null, ['manual_confirmed' => true]);
+            }
+
+            $this->sendSuccess(['transaction_id' => $txnId, 'status' => 'completed']);
+        } catch (Exception $e) {
+            $this->sendError('Failed to confirm payment: ' . $e->getMessage(), 500);
         }
     }
     

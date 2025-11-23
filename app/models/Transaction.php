@@ -9,7 +9,7 @@ require_once __DIR__ . '/BaseModel.php';
 class Transaction extends BaseModel {
     protected $table = 'transactions';
     protected $fillable = [
-        'transaction_number', 'customer_id', 'user_id', 'transaction_type',
+        'transaction_number', 'customer_id', 'user_id', 'served_by', 'transaction_type',
         'subtotal', 'discount_amount', 'discount_percentage', 'tax_amount',
         'tax_percentage', 'total_amount', 'payment_method', 'payment_reference',
         'cash_received', 'cash_change',
@@ -165,8 +165,12 @@ class Transaction extends BaseModel {
                 $this->createTransactionItem($item);
                 error_log("✅ Transaction item created for product {$item['product_id']}");
                 
-                // Update product stock
-                $this->updateProductStock($item['product_id'], -$item['quantity'], 'out', 'transaction', $transactionId, $transactionData['user_id']);
+                // Update product stock (skip for Shop online transactions)
+                $servedBy = strtolower($transactionData['served_by'] ?? '');
+                $isShopOnline = ($servedBy === 'system online');
+                if (!$isShopOnline) {
+                    $this->updateProductStock($item['product_id'], -$item['quantity'], 'out', 'transaction', $transactionId, $transactionData['user_id']);
+                }
                 error_log("✅ Stock updated for product {$item['product_id']}");
             }
             
@@ -300,16 +304,40 @@ class Transaction extends BaseModel {
     /**
      * Get sales statistics
      */
-    public function getSalesStats($startDate = null, $endDate = null) {
-        // Get today's stats
-        $sqlToday = "SELECT 
-                        COUNT(*) as today_count,
-                        COALESCE(SUM(total_amount), 0) as today_revenue
-                    FROM {$this->table} 
-                    WHERE status = 'completed' 
-                    AND DATE(created_at) = CURDATE()";
-        $stmtToday = $this->pdo->query($sqlToday);
-        $todayStats = $stmtToday->fetch();
+    public function getSalesStats($startDate = null, $endDate = null, $type = 'all') {
+        // Build source filter
+        $shopFilter = "(LOWER(served_by) = 'system online' OR LOWER(notes) LIKE 'order %')";
+        $posFilter = "NOT (LOWER(served_by) = 'system online' OR LOWER(notes) LIKE 'order %')";
+        $whereSource = '';
+        if ($type === 'shop') { $whereSource = " AND $shopFilter"; }
+        if ($type === 'pos')  { $whereSource = " AND $posFilter"; }
+
+        // Today's transactions (all statuses) from transactions table
+        $sqlTxnTodayCount = "SELECT COUNT(*) as txn_today_count FROM {$this->table} WHERE DATE(created_at) = CURDATE()" . $whereSource;
+        $stmtTxnTodayCount = $this->pdo->query($sqlTxnTodayCount);
+        $txnTodayCount = $stmtTxnTodayCount->fetch();
+
+        // Today's paid Shop orders that do not yet exist as transactions
+        $sqlOrdersMissing = "SELECT COUNT(*) as orders_today_missing
+                             FROM orders o
+                             WHERE o.payment_status = 'paid'
+                               AND o.order_status IN ('processing','ready','completed')
+                               AND DATE(o.paid_at) = CURDATE()
+                               AND NOT EXISTS (
+                                    SELECT 1 FROM {$this->table} t
+                                    WHERE (t.payment_reference IS NOT NULL AND t.payment_reference = o.payment_reference)
+                                       OR (t.notes LIKE CONCAT('Order ', COALESCE(o.order_number, o.id), '%'))
+                               )";
+        $ordersMissing = ['orders_today_missing' => 0];
+        if ($type === 'all' || $type === 'shop') {
+            $stmtOrdersMissing = $this->pdo->query($sqlOrdersMissing);
+            $ordersMissing = $stmtOrdersMissing->fetch();
+        }
+
+        // Today's revenue (completed only)
+        $sqlTodayRevenue = "SELECT COALESCE(SUM(total_amount), 0) as today_revenue FROM {$this->table} WHERE status = 'completed' AND DATE(created_at) = CURDATE()" . $whereSource;
+        $stmtTodayRevenue = $this->pdo->query($sqlTodayRevenue);
+        $todayRevenue = $stmtTodayRevenue->fetch();
         
         // Get this month stats
         $sqlMonth = "SELECT 
@@ -318,21 +346,21 @@ class Transaction extends BaseModel {
                     FROM {$this->table} 
                     WHERE status = 'completed' 
                     AND YEAR(created_at) = YEAR(CURDATE())
-                    AND MONTH(created_at) = MONTH(CURDATE())";
+                    AND MONTH(created_at) = MONTH(CURDATE())" . $whereSource;
         $stmtMonth = $this->pdo->query($sqlMonth);
         $monthStats = $stmtMonth->fetch();
         
         // Get pending count
         $sqlPending = "SELECT COUNT(*) as pending_count
                       FROM {$this->table} 
-                      WHERE status = 'pending'";
+                      WHERE status = 'pending'" . $whereSource;
         $stmtPending = $this->pdo->query($sqlPending);
         $pendingStats = $stmtPending->fetch();
         
         // Combine all stats
         return [
-            'today_count' => (int)$todayStats['today_count'],
-            'today_revenue' => (float)$todayStats['today_revenue'],
+            'today_count' => (int)($txnTodayCount['txn_today_count'] ?? 0) + (int)($ordersMissing['orders_today_missing'] ?? 0),
+            'today_revenue' => (float)$todayRevenue['today_revenue'],
             'month_count' => (int)$monthStats['month_count'],
             'month_revenue' => (float)$monthStats['month_revenue'],
             'pending_count' => (int)$pendingStats['pending_count']

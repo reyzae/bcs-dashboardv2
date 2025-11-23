@@ -32,7 +32,7 @@ $dashboard_title = getDashboardTitle();
     <!-- CSRF token for AJAX requests -->
     <meta name="csrf-token" content="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
     <!-- Brand theme color for mobile UI -->
-    <meta name="theme-color" content="#4f46e5">
+    <meta name="theme-color" content="#16a34a">
     
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -50,6 +50,8 @@ $dashboard_title = getDashboardTitle();
     
     <!-- Chart.js Library -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
+    
     
     <style>
         :root {
@@ -167,7 +169,7 @@ $dashboard_title = getDashboardTitle();
         .user-menu-button:hover {
             background: #f9fafb;
             border-color: var(--primary-color);
-            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+            box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25);
         }
 
         .user-menu-button .user-avatar {
@@ -337,6 +339,193 @@ $dashboard_title = getDashboardTitle();
             color: #dc2626;
         }
 
+        /* Notification Dropdown Styles */
+        .notification-wrapper {
+            position: relative;
+        }
+
+        .notification-dropdown {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            width: 380px;
+            max-height: 500px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+        }
+
+        .notification-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .notification-header h3 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        .mark-all-read {
+            font-size: 12px;
+            padding: 6px 12px;
+            background: transparent;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            color: #6b7280;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .mark-all-read:hover {
+            background: #f3f4f6;
+            color: #374151;
+            border-color: #9ca3af;
+        }
+
+        .notification-list {
+            max-height: 350px;
+            overflow-y: auto;
+        }
+
+        .notification-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 16px 20px;
+            border-bottom: 1px solid #f3f4f6;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .notification-item:hover {
+            background: #f8fafc;
+        }
+
+        .notification-item.unread {
+            background: #eff6ff;
+            border-left: 3px solid var(--primary-color);
+        }
+
+        .notification-item.unread:hover {
+            background: #dbeafe;
+        }
+
+        .notification-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 16px;
+        }
+
+        .notification-icon.order {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        .notification-icon.payment {
+            background: #d1fae5;
+            color: #059669;
+        }
+
+        .notification-icon.status {
+            background: #e0e7ff;
+            color: #6366f1;
+        }
+
+        .notification-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .notification-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 4px;
+            line-height: 1.3;
+        }
+
+        .notification-message {
+            font-size: 13px;
+            color: #6b7280;
+            line-height: 1.4;
+            margin-bottom: 4px;
+        }
+
+        .notification-time {
+            font-size: 11px;
+            color: #9ca3af;
+        }
+
+        .notification-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: #9ca3af;
+        }
+
+        .notification-empty i {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .notification-empty p {
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .notification-footer {
+            padding: 12px 20px;
+            background: #f8fafc;
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+        }
+
+        .view-all-notifications {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .view-all-notifications:hover {
+            color: var(--primary-dark);
+        }
+
+        .notification-badge {
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            background: #ef4444;
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 10px;
+            min-width: 18px;
+            text-align: center;
+            line-height: 1.2;
+        }
+
         @media (max-width: 768px) {
             .user-info-compact {
                 display: none;
@@ -345,6 +534,16 @@ $dashboard_title = getDashboardTitle();
             .user-menu-dropdown {
                 right: -12px;
                 min-width: 260px;
+            }
+
+            .notification-dropdown {
+                right: -12px;
+                width: calc(100vw - 24px);
+                max-width: 360px;
+            }
+
+            .notification-list {
+                max-height: 300px;
             }
         }
     </style>
@@ -429,10 +628,12 @@ $dashboard_title = getDashboardTitle();
                         <i class="fas fa-compress"></i>
                     </button>
                     <!-- Notifications -->
-                    <button class="btn btn-icon header-icon-btn" id="notificationsBtn" title="Notifications" aria-label="Open notifications">
-                        <i class="fas fa-bell"></i>
-                        <span class="notification-badge" id="notificationCount" style="display: none;">0</span>
-                    </button>
+                    <div class="notification-wrapper">
+                        <button class="btn btn-icon header-icon-btn" id="notificationsBtn" title="Notifications" aria-label="Open notifications">
+                            <i class="fas fa-bell"></i>
+                            <span class="notification-badge" id="notificationCount" style="display: none;">0</span>
+                        </button>
+                    </div>
                     
                     <!-- Quick Actions Dropdown (Role-based) -->
                     <?php if ($current_user['role'] === 'admin' || $current_user['role'] === 'manager'): ?>

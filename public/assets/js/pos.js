@@ -1044,14 +1044,14 @@ class POSManager {
         let paymentInfoHTML = '';
         if (paymentInfo && this.paymentMethod !== 'cash') {
             if (this.paymentMethod === 'qris') {
-                const qrImage = (paymentInfo && paymentInfo.qr_code_url) ? paymentInfo.qr_code_url : '../assets/img/qris-gopay.svg';
+                const qrImage = (paymentInfo && paymentInfo.qr_code_url) ? paymentInfo.qr_code_url : '/assets/img/qris-gopay.svg';
                 paymentInfoHTML = `
                     <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; border: 2px solid #e5e7eb;">
                         <h3 style="color: #374151; margin-bottom: 1rem; font-size: 18px;">
                             <i class="fas fa-qrcode"></i> QR Code Payment
                         </h3>
                         <div style="text-align: center; margin-bottom: 1rem;">
-                            <img src="${Utils.resolveImageUrl(qrImage)}" alt="QR Code" 
+                            <img src="${Utils.resolveImageUrl(qrImage)}" alt="QR Code" onerror="this.src='/assets/img/qris-gopay.svg'" 
                                  style="max-width: 250px; width: 100%; border: 2px solid #e5e7eb; border-radius: 8px; padding: 1rem; background: white;">
                         </div>
                         <div style="background: #f3f4f6; padding: 1rem; border-radius: 6px; font-size: 14px; color: #6b7280;">
@@ -1165,18 +1165,18 @@ class POSManager {
         modal.innerHTML = `
             <div class="modal-content" style="max-width: 600px; text-align: center; animation: slideUp 0.3s ease;">
                 <div style="padding: 2rem;">
-                    <!-- Success Icon -->
-                    <div style="margin-bottom: 1.5rem;">
-                        <div style="width: 80px; height: 80px; background: #10b981; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; animation: scaleIn 0.5s ease;">
-                            <i class="fas fa-check" style="font-size: 40px; color: white;"></i>
+                    <!-- Waiting Icon -->
+                    <div id="statusIcon" style="margin-bottom: 1.5rem;">
+                        <div style="width: 80px; height: 80px; background: #f59e0b; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center;">
+                            <i class="fas fa-spinner fa-spin" style="font-size: 34px; color: white;"></i>
                         </div>
                     </div>
                     
                     <!-- Title -->
-                    <h2 style="color: #10b981; margin-bottom: 0.5rem; font-size: 28px;">
-                        <i class="fas fa-check-circle"></i> Transaction Successful!
+                    <h2 id="statusTitle" style="color: #f59e0b; margin-bottom: 0.5rem; font-size: 24px;">
+                        <i class="fas fa-hourglass-half"></i> Waiting Payment
                     </h2>
-                    <p style="color: #6b7280; margin-bottom: 2rem;">Your transaction has been completed</p>
+                    <p id="statusSubtitle" style="color: #6b7280; margin-bottom: 2rem;">Menunggu konfirmasi kasir/admin: Payment Accepted</p>
                     
                     <!-- Transaction Info -->
                     <div style="background: #f9fafb; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; text-align: left;">
@@ -1197,7 +1197,7 @@ class POSManager {
                     </div>
                     
                     <!-- Amount Info -->
-                    <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); padding: 2rem; border-radius: 8px; color: white; margin-bottom: 1.5rem;">
+                    <div style="background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); padding: 2rem; border-radius: 8px; color: white; margin-bottom: 1.5rem;">
                         <div style="font-size: 14px; opacity: 0.9; margin-bottom: 0.5rem;">TOTAL AMOUNT</div>
                         <div style="font-size: 48px; font-weight: bold; margin-bottom: 1rem;">${app.formatCurrency(total)}</div>
                         
@@ -1224,16 +1224,20 @@ class POSManager {
                     ${paymentInfoHTML}
                     
                     <!-- Action Buttons -->
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
-                        <button onclick="posManager.printReceipt(${transactionId})" class="btn btn-primary" style="padding: 1rem; font-size: 14px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+                        <button id="acceptPaymentBtn" class="btn btn-success" style="padding: 1rem; font-size: 14px;">
+                            <i class="fas fa-check"></i><br>
+                            <span style="font-size: 12px;">Payment Accepted</span>
+                        </button>
+                        <button onclick="posManager.printReceipt(${transactionId})" class="btn btn-primary" style="padding: 1rem; font-size: 14px;" disabled>
                             <i class="fas fa-print"></i><br>
                             <span style="font-size: 12px;">Print Receipt</span>
                         </button>
-                        <button onclick="posManager.startNewTransaction()" class="btn btn-success" style="padding: 1rem; font-size: 14px;">
+                        <button onclick="posManager.startNewTransaction()" class="btn btn-success" style="padding: 1rem; font-size: 14px;" disabled>
                             <i class="fas fa-plus-circle"></i><br>
                             <span style="font-size: 12px;">New Sale</span>
                         </button>
-                        <button onclick="posManager.viewTransactionDetails(${transactionId})" class="btn btn-secondary" style="padding: 1rem; font-size: 14px;">
+                        <button onclick="posManager.viewTransactionDetails(${transactionId})" class="btn btn-secondary" style="padding: 1rem; font-size: 14px;" disabled>
                             <i class="fas fa-file-invoice"></i><br>
                             <span style="font-size: 12px;">View Details</span>
                         </button>
@@ -1283,8 +1287,45 @@ class POSManager {
         };
         document.addEventListener('keydown', escHandler);
         
-        // Play success sound (optional)
-        this.playSuccessSound();
+        // Bind accept payment
+        const acceptBtn = modal.querySelector('#acceptPaymentBtn');
+        const printBtn = modal.querySelector('button.btn.btn-primary');
+        const newBtn = modal.querySelectorAll('button.btn.btn-success')[1];
+        const viewBtn = modal.querySelector('button.btn.btn-secondary');
+        const titleEl = modal.querySelector('#statusTitle');
+        const subEl = modal.querySelector('#statusSubtitle');
+        const iconEl = modal.querySelector('#statusIcon');
+        if (acceptBtn) {
+            acceptBtn.addEventListener('click', async ()=>{
+                try {
+                    acceptBtn.disabled = true;
+                    acceptBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><br><span style="font-size:12px;">Processing...</span>';
+                    const resp = await app.apiCall('../api.php?controller=pos&action=confirmPayment', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ transaction_id: transactionId })
+                    });
+                    if (resp && resp.success) {
+                        // Update UI to success state
+                        if (iconEl) iconEl.innerHTML = '<div style="width:80px;height:80px;background:#10b981;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;"><i class="fas fa-check" style="font-size:40px;color:white;"></i></div>';
+                        if (titleEl) { titleEl.innerHTML = '<i class="fas fa-check-circle"></i> Transaction Successful!'; titleEl.style.color = '#10b981'; }
+                        if (subEl) subEl.textContent = 'Your transaction has been completed';
+                        // Enable buttons
+                        [printBtn, newBtn, viewBtn].forEach(b => { if (b) b.disabled = false; });
+                        // Play success sound
+                        posManager.playSuccessSound();
+                    } else {
+                        acceptBtn.disabled = false;
+                        acceptBtn.innerHTML = '<i class="fas fa-check"></i><br><span style="font-size:12px;">Payment Accepted</span>';
+                        app.showToast(resp?.message || 'Failed to confirm payment', 'error');
+                    }
+                } catch (e) {
+                    acceptBtn.disabled = false;
+                    acceptBtn.innerHTML = '<i class="fas fa-check"></i><br><span style="font-size:12px;">Payment Accepted</span>';
+                    app.showToast('Failed to confirm payment', 'error');
+                }
+            });
+        }
     }
 
     // Print receipt
@@ -1728,7 +1769,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.posManager = new POSManager();
     
     // Log keyboard shortcuts
-    console.log('%c🎮 POS Keyboard Shortcuts:', 'font-weight: bold; font-size: 14px; color: #667eea;');
+    console.log('%c🎮 POS Keyboard Shortcuts:', 'font-weight: bold; font-size: 14px; color: #16a34a;');
     console.log('F1  - Focus Product Search');
     console.log('F2  - Clear Cart');
     console.log('F3  - Hold Transaction');

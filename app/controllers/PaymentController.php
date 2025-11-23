@@ -4,6 +4,8 @@ require_once __DIR__ . '/../models/Payment.php';
 require_once __DIR__ . '/../models/Order.php';
 require_once __DIR__ . '/../models/Product.php';
 require_once __DIR__ . '/../models/Notification.php';
+require_once __DIR__ . '/../models/Transaction.php';
+require_once __DIR__ . '/../models/Customer.php';
 require_once __DIR__ . '/BaseController.php';
 
 /**
@@ -99,7 +101,11 @@ class PaymentController extends BaseController {
             );
             
             $this->pdo->commit();
-            
+
+            try {
+                $this->createTransactionFromOrder($order['id']);
+            } catch (Exception $e) {}
+
             $this->sendSuccess([
                 'order_number' => $order['order_number'],
                 'transaction_id' => $transactionId,
@@ -197,8 +203,11 @@ class PaymentController extends BaseController {
             }
             
             $this->pdo->commit();
-            
-            // Return success response to payment gateway
+
+            if ($paymentStatus === 'success') {
+                try { $this->createTransactionFromOrder($order['id']); } catch (Exception $e) {}
+            }
+
             $this->sendSuccess([
                 'status' => 'success',
                 'message' => 'Webhook processed successfully'
@@ -437,6 +446,10 @@ class PaymentController extends BaseController {
 
             $this->pdo->commit();
 
+            if ($confirmPaid) {
+                try { $this->createTransactionFromOrder($order['id']); } catch (Exception $e) {}
+            }
+
             $this->sendSuccess([
                 'order_number' => $order['order_number'],
                 'payment_status' => $confirmPaid ? 'paid' : $order['payment_status'],
@@ -447,6 +460,101 @@ class PaymentController extends BaseController {
             $this->pdo->rollback();
             $this->sendError('Manual update failed: ' . $e->getMessage(), 500);
         }
+    }
+    private function createTransactionFromOrder($orderId) {
+        $order = $this->orderModel->findWithItems($orderId);
+        if (!$order) { return; }
+
+        $customerId = null;
+        $phone = $order['customer_phone'] ?? '';
+        $email = $order['customer_email'] ?? '';
+        $name = $order['customer_name'] ?? '';
+
+        $customerModel = new Customer($this->pdo);
+        if (!empty($phone) || !empty($email)) {
+            $sql = "SELECT id FROM customers WHERE (phone = ? AND phone IS NOT NULL) OR (email = ? AND email IS NOT NULL) LIMIT 1";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$phone, $email]);
+            $row = $stmt->fetch();
+            if ($row && isset($row['id'])) { $customerId = (int)$row['id']; }
+        }
+
+        if (!$customerId) {
+            $code = $customerModel->generateCustomerCode();
+            $customerId = $customerModel->create([
+                'customer_code' => $code,
+                'name' => $name ?: 'Online Customer',
+                'email' => $email ?: null,
+                'phone' => $phone ?: null,
+                'address' => $order['customer_address'] ?? null,
+                'is_active' => 1
+            ]);
+        }
+
+        $transactionModel = new Transaction($this->pdo);
+        $systemUserId = $this->getSystemUserId();
+        $txData = [
+            'customer_id' => $customerId,
+            'user_id' => $systemUserId,
+            'served_by' => 'System Online',
+            'transaction_type' => 'sale',
+            'subtotal' => (float)($order['subtotal'] ?? 0),
+            'discount_amount' => (float)($order['discount_amount'] ?? 0),
+            'discount_percentage' => 0,
+            'tax_amount' => (float)($order['tax_amount'] ?? 0),
+            'tax_percentage' => null,
+            'total_amount' => (float)($order['total_amount'] ?? 0),
+            'payment_method' => $order['payment_method'] ?? null,
+            'payment_reference' => $order['payment_reference'] ?? $order['payment']['transaction_id'] ?? null,
+            'cash_received' => null,
+            'cash_change' => null,
+            'status' => 'completed',
+            'notes' => 'Order ' . ($order['order_number'] ?? $orderId)
+        ];
+
+        $items = [];
+        foreach (($order['items'] ?? []) as $it) {
+            $items[] = [
+                'product_id' => (int)$it['product_id'],
+                'quantity' => (int)$it['quantity'],
+                'unit_price' => (float)$it['unit_price'],
+                'discount_amount' => 0,
+                'discount_percentage' => 0,
+                'total_price' => (float)($it['total_price'] ?? ($it['quantity'] * $it['unit_price']))
+            ];
+        }
+
+        $exists = false;
+        $ref = $txData['payment_reference'];
+        if ($ref) {
+            $chk = $this->pdo->prepare("SELECT id FROM transactions WHERE payment_reference = ? LIMIT 1");
+            $chk->execute([$ref]);
+            $exists = (bool)$chk->fetch();
+        }
+
+        if (!$exists) {
+            try { $transactionModel->createWithItems($txData, $items); } catch (Exception $e) {}
+        }
+    }
+
+    private function getSystemUserId() {
+        if (isset($this->user['id']) && $this->user['id']) { return (int)$this->user['id']; }
+        try {
+            // Prefer admin/manager active user
+            $stmt = $this->pdo->prepare("SELECT id FROM users WHERE is_active = 1 AND role IN ('admin','manager') ORDER BY id ASC LIMIT 1");
+            $stmt->execute();
+            $row = $stmt->fetch();
+            if ($row && isset($row['id'])) { return (int)$row['id']; }
+        } catch (Exception $e) { /* ignore */ }
+        // Fallback to first user
+        try {
+            $stmt = $this->pdo->prepare("SELECT id FROM users ORDER BY id ASC LIMIT 1");
+            $stmt->execute();
+            $row = $stmt->fetch();
+            if ($row && isset($row['id'])) { return (int)$row['id']; }
+        } catch (Exception $e) { /* ignore */ }
+        // As last resort, set to 1 (common admin id)
+        return 1;
     }
 }
 

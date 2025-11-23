@@ -2,10 +2,18 @@
  * Orders Page - Manage incoming orders and statuses
  */
 
+const ensureOrderAnimStyles = () => {
+    if (document.getElementById('orderAnimStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'orderAnimStyles';
+    style.textContent = `.accept-pulse{animation:acceptPulse .8s ease-out}.badge-success.blink{animation:badgeBlink 1.2s ease-out}.action-buttons .btn{position:relative}@keyframes acceptPulse{0%{transform:scale(.95);box-shadow:0 0 0 0 rgba(16,185,129,0)}50%{transform:scale(1.05);box-shadow:0 0 0 8px rgba(16,185,129,.18)}100%{transform:scale(1);box-shadow:0 0 0 0 rgba(16,185,129,0)}}@keyframes badgeBlink{0%{transform:scale(.92)}40%{transform:scale(1.06)}100%{transform:scale(1)}}`;
+    document.head.appendChild(style);
+}
+
 class OrdersPage {
     constructor() {
         this.activeStatus = 'pending';
-        this.pollIntervalMs = 10000; // 10s
+        this.pollIntervalMs = 5000; // 5s for more real-time
         this.poller = null;
         this.init();
     }
@@ -120,7 +128,11 @@ class OrdersPage {
             const itemsCount = (order.items_count ?? order.item_count ?? order.items_total ?? '-');
             const total = app.formatCurrency(order.total_amount || 0);
             const placed = app.formatDateTime(order.created_at || '');
-            const payment = this.paymentBadge(order.payment_status);
+            const paymentMain = this.paymentBadge(order.payment_status_resolved || order.payment_status);
+            const verifyBadge = (order.verification_requested === 1 || order.verification_requested === true)
+                ? ' <span class="badge badge-info" title="Pembeli meminta verifikasi"><i class="fas fa-shield-alt"></i> Verify Req</span>'
+                : '';
+            const payment = `${paymentMain}${verifyBadge}`;
             const statusBadge = this.orderStatusBadge(order.order_status);
 
             return `
@@ -142,6 +154,8 @@ class OrdersPage {
             `;
         }).join('');
         tbody.innerHTML = rows;
+        const table = document.getElementById('ordersTable');
+        if (table) { table.classList.add('table-refresh'); setTimeout(()=>table.classList.remove('table-refresh'), 240); }
 
         // Bind action buttons
         tbody.querySelectorAll('[data-action]').forEach(btn => {
@@ -161,14 +175,18 @@ class OrdersPage {
     actionButtons(order) {
         const id = order.id;
         const status = (order.order_status || '').toLowerCase();
-        const paymentStatus = (order.payment_status || '').toLowerCase();
+        const paymentStatus = ((order.payment_status_resolved || order.payment_status || '')).toLowerCase();
         const btn = (icon, label, action, color = 'primary') => {
             return `<button class="btn btn-${color} btn-sm" data-id="${id}" data-action="${action}"><i class="fas fa-${icon}"></i> ${label}</button>`;
         };
 
         let content = '';
         if (status === 'pending') {
-            content = btn('play', 'Mulai', 'processing', 'primary') + btn('times', 'Batal', 'cancelled', 'danger');
+            const canStart = (paymentStatus === 'paid' || paymentStatus === 'success');
+            const startBtn = canStart
+                ? btn('play', 'Mulai', 'processing', 'primary')
+                : `<button class="btn btn-secondary btn-sm" data-id="${id}" data-action="processing" disabled title="Menunggu Payment Accepted"><i class="fas fa-play"></i> Mulai</button>`;
+            content = startBtn + btn('times', 'Batal', 'cancelled', 'danger');
         } else if (status === 'processing') {
             content = btn('check-circle', 'Selesai', 'completed', 'success') + btn('ban', 'Batal', 'cancelled', 'danger');
         } else if (status === 'completed') {
@@ -178,8 +196,10 @@ class OrdersPage {
         } else {
             content = `<span class="badge badge-secondary">${status}</span>`;
         }
-        // Payment actions: allow Accept Payment while payment is still pending
-        if (paymentStatus === 'pending') {
+        // Payment actions: hanya tampil jika pembeli sudah klik verifikasi
+        const verReq = (order.verification_requested === 1 || order.verification_requested === true);
+        const allowAccept = (status === 'pending' && !(paymentStatus === 'paid' || paymentStatus === 'success'));
+        if (allowAccept && verReq) {
             content += ` <button class="btn btn-success btn-sm" title="Verifikasi: Pembayaran sudah diterima" data-id="${id}" data-order-number="${order.order_number}" data-action="accept-payment"><i class="fas fa-check"></i> Payment Accepted</button>`;
         }
         return `<div class="action-buttons">${content}</div>`;
@@ -209,6 +229,7 @@ class OrdersPage {
         const st = (status || '').toLowerCase();
         if (st === 'paid' || st === 'success') return '<span class="badge badge-success">PAID</span>';
         if (st === 'pending') return '<span class="badge badge-warning">PENDING</span>';
+        if (st === 'verification_requested') return '<span class="badge badge-info">VERIFY REQ</span>';
         if (st === 'failed') return '<span class="badge badge-danger">FAILED</span>';
         return `<span class="badge badge-secondary">${status || '-'}</span>`;
     }
@@ -229,6 +250,8 @@ class OrdersPage {
             const original = buttonEl.innerHTML;
             buttonEl.disabled = true;
             buttonEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+            buttonEl.style.transition = 'transform 240ms ease';
+            buttonEl.style.transform = 'scale(0.96)';
             const resp = await app.apiCall(`../api.php?controller=payment&action=manualUpdate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -236,8 +259,27 @@ class OrdersPage {
             });
             if (resp.success) {
                 app.showToast('Pembayaran diterima', 'success');
-                this.loadCounts();
-                this.loadOrders(this.activeStatus);
+                if (window.app && app.showToast) app.showToast('Pembayaran dikonfirmasi, klik Mulai untuk memproses', 'info');
+                ensureOrderAnimStyles();
+                buttonEl.innerHTML = '<i class="fas fa-check" style="color:#10b981"></i> Payment Accepted';
+                buttonEl.classList.add('accept-pulse');
+                setTimeout(()=>{ buttonEl.style.transform = 'scale(1)'; }, 120);
+                // Enable tombol Mulai pada baris ini tanpa memindahkan status
+                const id = parseInt(buttonEl.getAttribute('data-id'), 10);
+                const row = buttonEl.closest('tr');
+                if (row) {
+                    const startBtn = row.querySelector(`button[data-action="processing"][data-id="${id}"]`);
+                    if (startBtn) {
+                        startBtn.disabled = false;
+                        startBtn.className = startBtn.className.replace('btn-secondary', 'btn-primary');
+                        startBtn.title = 'Mulai';
+                    }
+                    // Update badge Payment menjadi PAID
+                    const paymentCell = row.children && row.children[4];
+                    if (paymentCell) {
+                        paymentCell.innerHTML = '<span class="badge badge-success blink">PAID</span>';
+                    }
+                }
             } else {
                 throw new Error(resp.message || 'Gagal mengonfirmasi pembayaran');
             }
@@ -247,7 +289,7 @@ class OrdersPage {
         } finally {
             if (buttonEl) {
                 buttonEl.disabled = false;
-                buttonEl.innerHTML = '<i class="fas fa-check"></i> Payment Accepted';
+                buttonEl.innerHTML = '<i class="fas fa-check" style="color:#10b981"></i> Payment Accepted';
             }
         }
     }

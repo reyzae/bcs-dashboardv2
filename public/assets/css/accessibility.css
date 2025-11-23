@@ -14,11 +14,11 @@
 .skip-link:focus-visible {
   left: 12px;
   top: 12px;
-  outline: 3px solid #4f46e5;
+  outline: 3px solid #16a34a;
 }
 
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
-  outline: 3px solid #4f46e5;
+  outline: 3px solid #16a34a;
   outline-offset: 2px;
   border-radius: 6px;
 }

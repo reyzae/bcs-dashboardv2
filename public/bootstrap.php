@@ -38,6 +38,18 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once __DIR__ . '/../app/helpers/SecurityMiddleware.php';
 if (class_exists('SecurityMiddleware')) {
     SecurityMiddleware::generateCsrfToken();
+    // Expose CSRF token via cookie for client-side JS fallback
+    if (isset($_SESSION['csrf_token'])) {
+        $cookieParams = [
+            'expires' => time() + 7200,
+            'path' => '/',
+            'secure' => $isHttps,
+            'httponly' => false,
+            'samesite' => $isProductionEnv ? 'Strict' : 'Lax'
+        ];
+        // setcookie supports array options on PHP 7.3+
+        @setcookie('csrf_token', $_SESSION['csrf_token'], $cookieParams);
+    }
 }
 
 // Error reporting for development
@@ -55,9 +67,9 @@ $isProduction = ($_ENV['APP_ENV'] ?? 'development') === 'production';
 $csp = "default-src 'self'; "
     . "img-src 'self' data: blob:; "
     . "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
-    . "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+    . "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://static.cloudflareinsights.com; "
     . "font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
-    . "connect-src 'self'; "
+    . "connect-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://static.cloudflareinsights.com; "
     . "frame-ancestors 'self'; "
     . "base-uri 'self'";
 header('Content-Security-Policy: ' . $csp);

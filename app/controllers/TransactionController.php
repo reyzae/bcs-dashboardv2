@@ -3,6 +3,8 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../models/Transaction.php';
 require_once __DIR__ . '/../models/Product.php';
 require_once __DIR__ . '/../models/Customer.php';
+require_once __DIR__ . '/../models/Order.php';
+require_once __DIR__ . '/../models/Payment.php';
 require_once __DIR__ . '/BaseController.php';
 require_once __DIR__ . '/../helpers/ExportHelper.php';
 
@@ -15,12 +17,16 @@ class TransactionController extends BaseController {
     private $transactionModel;
     private $productModel;
     private $customerModel;
+    private $orderModel;
+    private $paymentModel;
     
     public function __construct($pdo) {
         parent::__construct($pdo);
         $this->transactionModel = new Transaction($pdo);
         $this->productModel = new Product($pdo);
         $this->customerModel = new Customer($pdo);
+        $this->orderModel = new Order($pdo);
+        $this->paymentModel = new Payment($pdo);
     }
     
     /**
@@ -132,25 +138,44 @@ class TransactionController extends BaseController {
      * Get transaction list
      */
     public function list() {
+        // Ensure we have current user context for sync user_id
+        $this->checkAuthentication();
+        
         $page = intval($_GET['page'] ?? 1);
         $limit = intval($_GET['limit'] ?? 20);
         $status = $_GET['status'] ?? null;
         $paymentMethod = $_GET['payment_method'] ?? null;
+        $type = $_GET['type'] ?? null;
         $startDate = $_GET['start_date'] ?? null;
         $endDate = $_GET['end_date'] ?? null;
         $offset = ($page - 1) * $limit;
         
         $conditions = [];
-        if ($status) {
-            $conditions['status'] = $status;
-        }
-        if ($paymentMethod) {
-            $conditions['payment_method'] = $paymentMethod;
-        }
+        if ($status) { $conditions['status'] = $status; }
+        if ($paymentMethod) { $conditions['payment_method'] = $paymentMethod; }
         
         $orderBy = 'created_at DESC';
+        $this->syncShopTransactions();
+
+        // Fetch all then apply source filter to ensure accurate counts
+        $all = $this->transactionModel->findAllWithDetails($conditions, $orderBy, null, null);
         
-        $transactions = $this->transactionModel->findAllWithDetails($conditions, $orderBy, $limit, $offset);
+        // Source filter
+        if ($type === 'shop') {
+            $all = array_filter($all, function($t){
+                $served = strtolower($t['served_by'] ?? '');
+                $notes = strtolower($t['notes'] ?? '');
+                return $served === 'system online' || (strpos($notes, 'order ') === 0);
+            });
+        } else if ($type === 'pos') {
+            $all = array_filter($all, function($t){
+                $served = strtolower($t['served_by'] ?? '');
+                $notes = strtolower($t['notes'] ?? '');
+                return !($served === 'system online' || (strpos($notes, 'order ') === 0));
+            });
+        }
+        
+        $transactions = array_values($all);
         
         // Apply date filter if provided
         if ($startDate || $endDate) {
@@ -162,17 +187,189 @@ class TransactionController extends BaseController {
             });
         }
         
-        $total = $this->transactionModel->count($conditions);
+        // Merge missing Shop orders into All view as pseudo-transactions
+        if (!$type || $type === 'all') {
+            try {
+                $sql = "SELECT o.* FROM orders o
+                        WHERE o.payment_status = 'paid' AND o.order_status IN ('processing','ready','completed')
+                        ORDER BY o.paid_at DESC LIMIT 200";
+                $stmt = $this->pdo->prepare($sql);
+                $stmt->execute();
+                $orders = $stmt->fetchAll();
+                foreach ($orders as $order) {
+                    $exists = false;
+                    $ref = $order['payment_reference'] ?? null;
+                    if ($ref) {
+                        $chk = $this->pdo->prepare("SELECT id FROM transactions WHERE payment_reference = ? LIMIT 1");
+                        $chk->execute([$ref]);
+                        $exists = (bool)$chk->fetch();
+                    }
+                    if (!$exists) {
+                        $prefix = 'Order ' . ($order['order_number'] ?? $order['id']);
+                        $chk2 = $this->pdo->prepare("SELECT id FROM transactions WHERE notes LIKE ? LIMIT 1");
+                        $chk2->execute([$prefix . '%']);
+                        $exists = (bool)$chk2->fetch();
+                    }
+                    if ($exists) { continue; }
+                    $transactions[] = [
+                        'id' => null,
+                        'transaction_number' => $order['order_number'] ?? ('ORD' . $order['id']),
+                        'customer_name' => $order['customer_name'] ?? 'Online Customer',
+                        'items_count' => $order['items_count'] ?? 0,
+                        'total_amount' => (float)($order['total_amount'] ?? 0),
+                        'payment_method' => $order['payment_method'] ?? null,
+                        'status' => 'completed',
+                        'created_at' => $order['paid_at'] ?? $order['created_at'] ?? date('Y-m-d H:i:s'),
+                        'served_by' => 'System Online',
+                        'notes' => 'Order ' . ($order['order_number'] ?? $order['id'])
+                    ];
+                }
+            } catch (Exception $e) { /* ignore */ }
+        }
+
+        // Sort by created_at DESC to ensure latest Shop orders appear at top
+        usort($transactions, function($a, $b) {
+            $da = isset($a['created_at']) ? strtotime($a['created_at']) : 0;
+            $db = isset($b['created_at']) ? strtotime($b['created_at']) : 0;
+            return $db <=> $da;
+        });
+
+        $total = count($transactions);
         
         $this->sendSuccess([
-            'transactions' => array_values($transactions),
+            'transactions' => array_slice($transactions, $offset, $limit),
             'pagination' => [
                 'page' => $page,
                 'limit' => $limit,
                 'total' => $total,
-                'pages' => ceil($total / $limit)
+                'pages' => max(1, ceil($total / $limit))
             ]
         ]);
+    }
+
+    private function syncShopTransactions() {
+        try {
+            // Find paid orders that do not yet have transactions
+            $sql = "SELECT o.* FROM orders o
+                    WHERE o.payment_status = 'paid' AND o.order_status IN ('processing','ready','completed')
+                    ORDER BY o.paid_at DESC LIMIT 200";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute();
+            $orders = $stmt->fetchAll();
+            if (!$orders) { return; }
+
+            foreach ($orders as $order) {
+                $exists = false;
+                // Check by payment_reference
+                $ref = $order['payment_reference'] ?? null;
+                if ($ref) {
+                    $chk = $this->pdo->prepare("SELECT id FROM transactions WHERE payment_reference = ? LIMIT 1");
+                    $chk->execute([$ref]);
+                    $exists = (bool)$chk->fetch();
+                }
+                // Fallback check by notes prefix
+                if (!$exists) {
+                    $prefix = 'Order ' . ($order['order_number'] ?? $order['id']);
+                    $chk2 = $this->pdo->prepare("SELECT id FROM transactions WHERE notes LIKE ? LIMIT 1");
+                    $chk2->execute([$prefix . '%']);
+                    $exists = (bool)$chk2->fetch();
+                }
+                if ($exists) { continue; }
+
+                // Build transaction payload
+                $items = $this->orderModel->getItems($order['id']);
+                $txItems = [];
+                foreach ($items as $it) {
+                    $txItems[] = [
+                        'product_id' => (int)$it['product_id'],
+                        'quantity' => (int)$it['quantity'],
+                        'unit_price' => (float)$it['unit_price'],
+                        'discount_amount' => 0,
+                        'discount_percentage' => 0,
+                        'total_price' => (float)($it['total_price'] ?? ($it['quantity'] * $it['unit_price']))
+                    ];
+                }
+
+                // Resolve customer
+                $customerId = null;
+                $phone = $order['customer_phone'] ?? '';
+                $email = $order['customer_email'] ?? '';
+                if (!empty($phone) || !empty($email)) {
+                    $cstmt = $this->pdo->prepare("SELECT id FROM customers WHERE (phone = ? AND phone IS NOT NULL) OR (email = ? AND email IS NOT NULL) LIMIT 1");
+                    $cstmt->execute([$phone, $email]);
+                    $row = $cstmt->fetch();
+                    if ($row && isset($row['id'])) { $customerId = (int)$row['id']; }
+                }
+                if (!$customerId) {
+                    $code = $this->customerModel->generateCustomerCode();
+                    $customerId = $this->customerModel->create([
+                        'customer_code' => $code,
+                        'name' => $order['customer_name'] ?: 'Online Customer',
+                        'email' => $email ?: null,
+                        'phone' => $phone ?: null,
+                        'address' => $order['customer_address'] ?? null,
+                        'is_active' => 1
+                    ]);
+                }
+
+                // Payment reference fallback
+                $payment = null; 
+                try { $payment = $this->paymentModel->findByOrderId($order['id']); } catch (Exception $e) { $payment = null; }
+                $paymentRef = $order['payment_reference'] ?? ($payment['transaction_id'] ?? null);
+
+                // Create transaction
+                $txData = [
+                    'customer_id' => $customerId,
+                    'user_id' => $this->getSystemUserId(),
+                    'served_by' => 'System Online',
+                    'transaction_type' => 'sale',
+                    'subtotal' => (float)($order['subtotal'] ?? 0),
+                    'discount_amount' => (float)($order['discount_amount'] ?? 0),
+                    'discount_percentage' => 0,
+                    'tax_amount' => (float)($order['tax_amount'] ?? 0),
+                    'tax_percentage' => null,
+                    'total_amount' => (float)($order['total_amount'] ?? 0),
+                    'payment_method' => $order['payment_method'] ?? null,
+                    'payment_reference' => $paymentRef,
+                    'cash_received' => null,
+                    'cash_change' => null,
+                    'status' => 'completed',
+                    'notes' => 'Order ' . ($order['order_number'] ?? $order['id'])
+                ];
+                try { $this->transactionModel->createWithItems($txData, $txItems); } catch (Exception $e) { /* continue */ }
+            }
+        } catch (Exception $e) { /* ignore sync errors */ }
+    }
+
+    public function syncShop() {
+        $this->checkAuthentication();
+        $this->requireRole(['admin','manager']);
+        $this->syncShopTransactions();
+        // Count Shop transactions after sync
+        $all = $this->transactionModel->findAllWithDetails([], 'created_at DESC', null, null);
+        $shops = array_filter($all, function($t){
+            $served = strtolower($t['served_by'] ?? '');
+            $notes = strtolower($t['notes'] ?? '');
+            return $served === 'system online' || (strpos($notes, 'order ') === 0);
+        });
+        $this->sendSuccess(['shop_transactions' => count($shops)], 'Shop transactions synchronized');
+    }
+
+    private function getSystemUserId() {
+        if (isset($this->user['id']) && $this->user['id']) { return (int)$this->user['id']; }
+        try {
+            $stmt = $this->pdo->prepare("SELECT id FROM users WHERE is_active = 1 AND role IN ('admin','manager') ORDER BY id ASC LIMIT 1");
+            $stmt->execute();
+            $row = $stmt->fetch();
+            if ($row && isset($row['id'])) { return (int)$row['id']; }
+        } catch (Exception $e) { /* ignore */ }
+        try {
+            $stmt = $this->pdo->prepare("SELECT id FROM users ORDER BY id ASC LIMIT 1");
+            $stmt->execute();
+            $row = $stmt->fetch();
+            if ($row && isset($row['id'])) { return (int)$row['id']; }
+        } catch (Exception $e) { /* ignore */ }
+        return 1;
     }
     
     /**
@@ -239,10 +436,12 @@ class TransactionController extends BaseController {
      * Get sales statistics
      */
     public function getStats() {
+        $this->checkAuthentication();
+        $this->syncShopTransactions();
         $startDate = $_GET['start_date'] ?? null;
         $endDate = $_GET['end_date'] ?? null;
-        
-        $stats = $this->transactionModel->getSalesStats($startDate, $endDate);
+        $type = $_GET['type'] ?? 'all';
+        $stats = $this->transactionModel->getSalesStats($startDate, $endDate, $type);
         $this->sendSuccess($stats);
     }
     
@@ -591,6 +790,9 @@ switch ($action) {
         break;
     case 'list':
         $transactionController->list();
+        break;
+    case 'sync-shop':
+        $transactionController->syncShop();
         break;
     case 'get':
         $transactionController->get();

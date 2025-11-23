@@ -216,21 +216,21 @@ require_once 'includes/header.php';
                 <form id="generalSettingsForm">
                             <!-- Section: Basic Info -->
                             <div style="margin-bottom: 2rem;">
-                                <h4 style="font-size: 1rem; font-weight: 600; color: #374151; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid #667eea;">
-                                    <i class="fas fa-info-circle" style="color: #667eea;"></i> Basic Information
+                                <h4 style="font-size: 1rem; font-weight: 600; color: #374151; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--primary-color);">
+                                    <i class="fas fa-info-circle" style="color: var(--primary-color);"></i> Basic Information
                                 </h4>
                                 
                                 <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.25rem;">
                         <div class="form-group">
                                         <label for="companyName" class="form-label">
-                                            <i class="fas fa-building" style="color: #667eea;"></i>
+                                            <i class="fas fa-building" style="color: var(--primary-color);"></i>
                                             Company Name <span style="color: #ef4444;">*</span>
                                         </label>
                                         <input type="text" id="companyName" class="form-control" value="Bytebalok" required>
                         </div>
                         <div class="form-group">
                                         <label for="companyPhone" class="form-label">
-                                            <i class="fas fa-phone" style="color: #667eea;"></i>
+                                            <i class="fas fa-phone" style="color: var(--primary-color);"></i>
                                             Phone <span style="color: #ef4444;">*</span>
                                         </label>
                                         <input type="tel" id="companyPhone" class="form-control" value="+62 21 1234 5678" required>
@@ -239,7 +239,7 @@ require_once 'includes/header.php';
 
                                 <div class="form-group" style="margin-bottom: 1.25rem;">
                                     <label for="companyAddress" class="form-label">
-                                        <i class="fas fa-map-marker-alt" style="color: #667eea;"></i>
+                                        <i class="fas fa-map-marker-alt" style="color: var(--primary-color);"></i>
                                         Address <span style="color: #ef4444;">*</span>
                                     </label>
                                     <textarea id="companyAddress" class="form-control" rows="3" required>Jl. Example No. 123, Jakarta</textarea>
@@ -248,14 +248,14 @@ require_once 'includes/header.php';
                                 <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
                                     <div class="form-group">
                                         <label for="companyEmail" class="form-label">
-                                            <i class="fas fa-envelope" style="color: #667eea;"></i>
+                                            <i class="fas fa-envelope" style="color: var(--primary-color);"></i>
                                             Email <span style="color: #ef4444;">*</span>
                                         </label>
                                         <input type="email" id="companyEmail" class="form-control" value="info@bytebalok.com" required>
                                     </div>
                                     <div class="form-group">
                                         <label for="companyWebsite" class="form-label">
-                                            <i class="fas fa-globe" style="color: #667eea;"></i>
+                                            <i class="fas fa-globe" style="color: var(--primary-color);"></i>
                                             Website
                                         </label>
                                         <input type="url" id="companyWebsite" class="form-control" value="https://bytebalok.com" placeholder="https://">
@@ -626,7 +626,7 @@ Sampai jumpa kembali.</textarea>
                             <div style="opacity: 0.5; pointer-events: none;">
                                 <div class="form-group" style="margin-bottom: 1.5rem;">
                                     <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                        <i class="fas fa-image" style="color: #667eea;"></i>
+                                        <i class="fas fa-image" style="color: var(--primary-color);"></i>
                                         Company Logo
                         </label>
                                     <div style="display: flex; align-items: center; gap: 1rem;">
@@ -644,7 +644,7 @@ Sampai jumpa kembali.</textarea>
 
                     <div class="form-group">
                                     <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                        <i class="fas fa-fill-drip" style="color: #667eea;"></i>
+                                        <i class="fas fa-fill-drip" style="color: var(--primary-color);"></i>
                                         Primary Brand Color
                                     </label>
                                     <input type="color" value="#667eea" style="width: 100px; height: 50px; border: 1px solid #d1d5db; border-radius: 8px;">
@@ -1564,10 +1564,13 @@ const settingsManager = {
             console.log('📦 Settings data:', settingsData);
             
             // Save to API
+            const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+            const csrfToken = csrfMeta && csrfMeta.content ? csrfMeta.content : (window.CSRF_TOKEN || '');
             const response = await fetch('../api.php?controller=settings&action=update', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
                 },
                 body: JSON.stringify(settingsData)
             });

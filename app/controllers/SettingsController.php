@@ -13,6 +13,69 @@ class SettingsController extends BaseController {
     }
     
     /**
+     * Get public settings (without authentication)
+     * Used for shop pages
+     */
+    public function get_public() {
+        try {
+            // Return only safe, public settings
+            $publicSettings = [
+                'cod_enabled' => '0', // Default COD disabled
+                'cod_min_amount' => '50000',
+                'cod_max_amount' => '1000000',
+                'tax_enabled' => '0', // Default tax disabled (shop-specific)
+                'tax_rate' => '11', // Default 11% (shop-specific)
+                'tax_name' => 'Pajak' // Default tax name (shop-specific)
+            ];
+            
+            // Try to get from database if table exists
+            if ($this->tableExists('settings')) {
+                // Try to get shop-specific tax settings first
+                $taxKeys = ['enable_tax_shop', 'tax_rate_shop', 'tax_name_shop'];
+                $placeholders = str_repeat('?,', count($taxKeys) - 1) . '?';
+                $sql = "SELECT `key`, `value` FROM settings WHERE `key` IN ($placeholders)";
+                $stmt = $this->pdo->prepare($sql);
+                $stmt->execute($taxKeys);
+                $shopTaxSettings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                // Map shop-specific settings to public settings
+                foreach ($shopTaxSettings as $setting) {
+                    if ($setting['key'] === 'enable_tax_shop') {
+                        $publicSettings['tax_enabled'] = $setting['value'];
+                    } elseif ($setting['key'] === 'tax_rate_shop') {
+                        $publicSettings['tax_rate'] = $setting['value'];
+                    } elseif ($setting['key'] === 'tax_name_shop') {
+                        $publicSettings['tax_name'] = $setting['value'];
+                    }
+                }
+                
+                // Get other settings
+                $keys = array_keys($publicSettings);
+                $placeholders = str_repeat('?,', count($keys) - 1) . '?';
+                $sql = "SELECT `key`, `value` FROM settings WHERE `key` IN ($placeholders)";
+                $stmt = $this->pdo->prepare($sql);
+                $stmt->execute($keys);
+                $settings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                foreach ($settings as $setting) {
+                    $publicSettings[$setting['key']] = $setting['value'];
+                }
+            }
+            
+            $this->sendSuccess($publicSettings);
+            
+        } catch (Exception $e) {
+            error_log('Public settings error: ' . $e->getMessage());
+            // Return default public settings on error
+            $this->sendSuccess([
+                'cod_enabled' => '0',
+                'cod_min_amount' => '50000',
+                'cod_max_amount' => '1000000'
+            ]);
+        }
+    }
+    
+    /**
      * Get all settings
      */
     public function getSettings() {
@@ -96,6 +159,7 @@ class SettingsController extends BaseController {
             // Shop-specific tax settings
             'enable_tax_shop' => '0',
             'tax_rate_shop' => '11',
+            'tax_name_shop' => 'Pajak',
             // Bank transfer settings (default values)
             'bank_default' => 'bca',
             'bank_bca_name' => 'Bytebalok',
@@ -324,6 +388,37 @@ class SettingsController extends BaseController {
             ]);
         }
     }
+
+    /**
+     * Get public bank settings (no authentication)
+     * Returns bank account information for public shop
+     */
+    public function get_public_banks() {
+        try {
+            $data = $this->getDefaultSettings();
+
+            // Attempt to read from DB if table exists
+            if ($this->tableExists('settings')) {
+                $bankKeys = [
+                    'bank_default', 'bank_bca_name', 'bank_bca_account',
+                    'bank_bri_name', 'bank_bri_account', 'bank_blu_bca_name', 'bank_blu_bca_account'
+                ];
+                $placeholders = str_repeat('?,', count($bankKeys) - 1) . '?';
+                $sql = "SELECT `key`, `value` FROM settings WHERE `key` IN ($placeholders)";
+                $stmt = $this->pdo->prepare($sql);
+                $stmt->execute($bankKeys);
+                $settings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($settings as $s) {
+                    $data[$s['key']] = $s['value'];
+                }
+            }
+
+            $this->sendSuccess($data);
+        } catch (Exception $e) {
+            // Fallback to defaults
+            $this->sendSuccess($this->getDefaultSettings());
+        }
+    }
 }
 
 // Handle requests
@@ -342,9 +437,17 @@ switch ($action) {
     case 'update':
         $settingsController->updateSettings();
         break;
+    case 'get_public':
+        // Public settings endpoint (no auth)
+        $settingsController->get_public();
+        break;
     case 'get_public_shop':
         // Public shop settings endpoint (no auth)
         $settingsController->get_public_shop();
+        break;
+    case 'get_public_banks':
+        // Public bank settings endpoint (no auth)
+        $settingsController->get_public_banks();
         break;
     default:
         $settingsController->sendError('Invalid action', 400);

@@ -123,7 +123,6 @@ class Order extends BaseModel {
         
         if ($status === 'paid') {
             $updateData['paid_at'] = date('Y-m-d H:i:s');
-            $updateData['order_status'] = 'processing';
         }
         
         return $this->update($orderId, $updateData);

@@ -2,9 +2,9 @@
 
 /* CSS Variables */
 :root {
-    --primary-color: #6366f1;
-    --primary-dark: #4f46e5;
-    --primary-light: #a5b4fc;
+    --primary-color: #16a34a;
+    --primary-dark: #15803d;
+    --primary-light: #86efac;
     --secondary-color: #f59e0b;
     --success-color: #10b981;
     --warning-color: #f59e0b;
@@ -48,6 +48,8 @@
 html {
     font-size: 16px;
     scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
 }
 
 /* Density Modes */
@@ -605,7 +607,7 @@ body {
 }
 
 .content {
-    padding: 1.25rem;
+    padding: clamp(0.75rem, 1.2vw, 1.25rem);
 }
 
 /* Dashboard filter bar */
@@ -886,7 +888,7 @@ body {
 
 /* Colored Stat Card Variants */
 .stat-card.stat-primary {
-    background: linear-gradient(135deg, #667eea 0%, #4f46e5 100%);
+    background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
     color: #fff;
     border-color: transparent;
 }
@@ -1045,6 +1047,22 @@ body {
 .table-responsive {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+}
+
+@keyframes tablePulse {
+    0% { box-shadow: var(--shadow-sm); }
+    50% { box-shadow: var(--shadow-md); }
+    100% { box-shadow: var(--shadow-sm); }
+}
+#ordersTable.table-refresh {
+    animation: tablePulse 240ms ease-out;
+}
+
+.action-buttons .btn {
+    transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.action-buttons .btn:active {
+    transform: scale(0.96);
 }
 
 .table {
@@ -1424,8 +1442,9 @@ body {
     display: inline-block;
 }
 
+
 .table-actions-btn {
-    background: #667eea;
+    background: var(--primary-color);
     color: white;
     border: none;
     padding: 0.5rem 0.75rem;
@@ -1439,9 +1458,9 @@ body {
 }
 
 .table-actions-btn:hover {
-    background: #5568d3;
+    background: var(--primary-dark);
     transform: translateY(-1px);
-    box-shadow: 0 4px 6px rgba(102, 110, 234, 0.3);
+    box-shadow: 0 4px 6px rgba(22, 163, 74, 0.3);
 }
 
 .table-actions-menu {

@@ -145,6 +145,14 @@ require_once 'includes/header.php';
                     <option value="qris">📱 QRIS</option>
                     <option value="transfer">🏦 Transfer</option>
                 </select>
+                <div style="display:flex; gap:.5rem; align-items:center;">
+                    <span style="font-size:.8rem; color:#6b7280;">Source:</span>
+                    <div id="sourceTabs" style="display:flex; gap:.25rem;">
+                        <button class="status-tab-btn active" id="tabSourceAll" data-source="all"><i class="fas fa-layer-group"></i> All</button>
+                        <button class="status-tab-btn" id="tabSourcePos" data-source="pos"><i class="fas fa-store"></i> POS</button>
+                        <button class="status-tab-btn" id="tabSourceShop" data-source="shop"><i class="fas fa-shopping-cart"></i> Shop</button>
+                    </div>
+                </div>
                 
                 <select id="dateRangeQuick" class="filter-chip-select">
                     <option value="">📅 All Time</option>
@@ -242,7 +250,7 @@ require_once 'includes/header.php';
                     <tbody>
                                 <tr id="loadingRow">
                                     <td colspan="9" style="text-align: center; padding: 3rem;">
-                                        <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: #667eea;"></i>
+                                        <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: #16a34a;"></i>
                                         <p style="margin-top: 1rem; color: #6b7280;">Loading transactions...</p>
                                     </td>
                                 </tr>
@@ -275,7 +283,7 @@ require_once 'includes/header.php';
 <div id="transactionModal" class="modal">
     <div class="modal-dialog" style="max-width: 900px;">
         <div class="modal-content">
-            <div class="modal-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); color: white; padding: 1.5rem;">
                 <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: white;">
                     <i class="fas fa-receipt"></i> Transaction Details
                 </h3>
@@ -495,6 +503,7 @@ class TransactionManager {
         this.autoRefreshInterval = null;
         this.revenueChart = null;
         this.userRole = '<?php echo $user_role; ?>';
+        this.currentSource = 'all';
     }
 
     async init() {
@@ -512,7 +521,8 @@ class TransactionManager {
 
     async loadStats() {
     try {
-        const response = await fetch('../api.php?controller=transaction&action=stats');
+        const typeParam = this.currentSource ? `&type=${this.currentSource}` : '&type=all';
+        const response = await fetch(`../api.php?controller=transaction&action=stats${typeParam}`);
         const data = await response.json();
             
         if (data.success) {
@@ -521,6 +531,7 @@ class TransactionManager {
                 this.animateCounter('todayRevenue', data.data.today_revenue || 0, true);
                 this.animateCounter('monthRevenue', data.data.month_revenue || 0, true);
                 this.animateCounter('pendingTransactions', data.data.pending_count || 0);
+                this.updateLastUpdated();
         }
     } catch (error) {
         console.error('Failed to load stats:', error);
@@ -554,6 +565,15 @@ class TransactionManager {
                 }
             }
         }, 16);
+    }
+
+    getSourceBadgeFromTxn(txn) {
+        const served = (txn.served_by || '').toLowerCase();
+        const notes = (txn.notes || '').toLowerCase();
+        const isShop = served === 'system online' || notes.startsWith('order ');
+        return isShop 
+            ? '<span class="badge" style="background:#3b82f6;">Shop</span>'
+            : '<span class="badge" style="background:#10b981;">POS</span>';
     }
 
     addTrendIndicator(elementId, trend) {
@@ -594,7 +614,8 @@ class TransactionManager {
                 loadingRow.style.display = 'table-row';
             }
             
-            const url = '../api.php?controller=transaction&action=list';
+            const typeParam = (this.currentSource && this.currentSource !== 'all') ? `&type=${this.currentSource}` : '';
+            const url = `../api.php?controller=transaction&action=list${typeParam}`;
             console.log('🔗 Fetching from:', url);
             
             const response = await fetch(url);
@@ -631,7 +652,33 @@ class TransactionManager {
             });
             
             if (data.success) {
-                this.transactions = data.data.transactions || [];
+                let txns = data.data.transactions || [];
+                // Fallback: Source=Shop → load Orders Completed when empty
+                if ((this.currentSource === 'shop') && (!txns || txns.length === 0)) {
+                    try {
+                        const oResp = await fetch('../api.php?controller=order&action=list&status=completed&limit=200');
+                        const oText = await oResp.text();
+                        const oData = JSON.parse(oText);
+                        if (oData.success && oData.data && Array.isArray(oData.data.orders)) {
+                            txns = (oData.data.orders || []).map(ord => ({
+                                id: ord.id,
+                                transaction_number: ord.order_number,
+                                customer_name: ord.customer_name || 'Online Customer',
+                                items_count: ord.items_count || 0,
+                                total_amount: ord.total_amount,
+                                payment_method: ord.payment_method,
+                                status: 'completed',
+                                created_at: ord.created_at,
+                                served_by: 'System Online',
+                                notes: `Order ${ord.order_number}`
+                            }));
+                        }
+                    } catch (e) {
+                        console.error('Fallback load from Orders failed:', e);
+                    }
+                }
+
+                this.transactions = txns;
                 this.filteredTransactions = this.transactions;
                 
                 console.log(`✅ Loaded ${this.transactions.length} transactions`);
@@ -722,40 +769,49 @@ class TransactionManager {
                     ${this.formatCurrency(txn.total_amount)}
                 </td>
                 <td style="text-align: center;">
-                    ${this.getPaymentIcon(txn.payment_method)}
+                    <div style="display:flex; align-items:center; justify-content:center; gap:.5rem;">
+                        ${this.getPaymentIcon(txn.payment_method)}
+                        ${this.getSourceBadgeFromTxn(txn)}
+                    </div>
                 </td>
                 <td style="text-align: center;">
                     ${this.getStatusBadge(txn.status)}
                 </td>
                 <td style="text-align: center;">
                     <div class="table-actions-dropdown" id="dropdown-${txn.id}">
-                        <button class="table-actions-btn" onclick="transactionManager.toggleActionsMenu(${txn.id})">
+                        <button class="table-actions-btn" ${!txn.id ? 'disabled' : ''} onclick="${!txn.id ? '' : `transactionManager.toggleActionsMenu(${txn.id})`}">
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
                         <div class="table-actions-menu" id="menu-${txn.id}">
-                            <button class="table-actions-menu-item info" onclick="transactionManager.viewTransaction(${txn.id}); transactionManager.closeActionsMenu(${txn.id})">
-                    <i class="fas fa-eye"></i>
-                                <span>View Details</span>
-                            </button>
-                            <button class="table-actions-menu-item" onclick="transactionManager.viewReceipt(${txn.id}); transactionManager.closeActionsMenu(${txn.id})">
-                                <i class="fas fa-receipt"></i>
-                                <span>View Receipt</span>
-                </button>
-                            <button class="table-actions-menu-item" onclick="transactionManager.printReceipt(${txn.id}); transactionManager.closeActionsMenu(${txn.id})">
-                    <i class="fas fa-print"></i>
-                                <span>Print Receipt</span>
-                </button>
-                            ${txn.status === 'completed' ? `
-                                <div style="border-top: 1px solid #e5e7eb; margin: 0.5rem 0;"></div>
-                                <button class="table-actions-menu-item warning" onclick="transactionManager.showRefundModal(${txn.id}); transactionManager.closeActionsMenu(${txn.id})">
-                                    <i class="fas fa-undo"></i>
-                                    <span>Refund</span>
+                            ${!txn.id ? `
+                                <div style="padding:0.5rem 0.75rem; color:#6b7280;">
+                                    <i class="fas fa-info-circle"></i> Order Shop belum tersinkron.
+                                </div>
+                            ` : `
+                                <button class="table-actions-menu-item info" onclick="transactionManager.viewTransaction(${txn.id}); transactionManager.closeActionsMenu(${txn.id})">
+                                    <i class="fas fa-eye"></i>
+                                    <span>View Details</span>
                                 </button>
-                                <button class="table-actions-menu-item danger" onclick="transactionManager.showCancelModal(${txn.id}); transactionManager.closeActionsMenu(${txn.id})">
-                                    <i class="fas fa-times-circle"></i>
-                                    <span>Cancel</span>
+                                <button class="table-actions-menu-item" onclick="transactionManager.viewReceipt(${txn.id}); transactionManager.closeActionsMenu(${txn.id})">
+                                    <i class="fas fa-receipt"></i>
+                                    <span>View Receipt</span>
                                 </button>
-                            ` : ''}
+                                <button class="table-actions-menu-item" onclick="transactionManager.printReceipt(${txn.id}); transactionManager.closeActionsMenu(${txn.id})">
+                                    <i class="fas fa-print"></i>
+                                    <span>Print Receipt</span>
+                                </button>
+                                ${txn.status === 'completed' ? `
+                                    <div style="border-top: 1px solid #e5e7eb; margin: 0.5rem 0;"></div>
+                                    <button class="table-actions-menu-item warning" onclick="transactionManager.showRefundModal(${txn.id}); transactionManager.closeActionsMenu(${txn.id})">
+                                        <i class="fas fa-undo"></i>
+                                        <span>Refund</span>
+                                    </button>
+                                    <button class="table-actions-menu-item danger" onclick="transactionManager.showCancelModal(${txn.id}); transactionManager.closeActionsMenu(${txn.id})">
+                                        <i class="fas fa-times-circle"></i>
+                                        <span>Cancel</span>
+                                    </button>
+                                ` : ''}
+                            `}
                         </div>
                     </div>
             </td>
@@ -834,7 +890,7 @@ class TransactionManager {
             <div class="customer-mobile-card" style="margin-bottom: 1rem; animation: fadeIn 0.3s ease;">
                 <div class="customer-mobile-card-header">
                     <div class="customer-mobile-card-title">
-                        <i class="fas fa-receipt" style="color: #667eea;"></i>
+                        <i class="fas fa-receipt" style="color: var(--primary-color);"></i>
                         ${txn.transaction_number}
                     </div>
                     ${this.getStatusBadge(txn.status)}
@@ -858,7 +914,7 @@ class TransactionManager {
                     </div>
                     <div class="customer-mobile-card-row">
                         <span class="customer-mobile-card-label"><i class="fas fa-credit-card"></i> Payment</span>
-                        <span class="customer-mobile-card-value">${this.getPaymentIcon(txn.payment_method)}</span>
+                        <span class="customer-mobile-card-value" style="display:flex; align-items:center; gap:.5rem;">${this.getPaymentIcon(txn.payment_method)} ${this.getSourceBadgeFromTxn(txn)}</span>
                     </div>
                 </div>
                 <div class="customer-mobile-card-actions">
@@ -899,6 +955,8 @@ class TransactionManager {
         if (paymentFilter) {
             filtered = filtered.filter(txn => txn.payment_method === paymentFilter);
         }
+
+        // Source filter handled on server via ?type= parameter
 
         // Date range filter
         const dateRangeEl = document.getElementById('dateRangeQuick');
@@ -957,6 +1015,7 @@ class TransactionManager {
         if (statusFilter && statusFilter.value) count++;
         if (paymentFilter && paymentFilter.value) count++;
         if (dateRangeQuick && dateRangeQuick.value) count++;
+        if (this.currentSource && this.currentSource !== 'all') count++;
         
         const countBadge = document.getElementById('activeFiltersCount');
         const countSpan = document.getElementById('filterCount');
@@ -989,6 +1048,9 @@ class TransactionManager {
         if (dateFrom) dateFrom.value = '';
         if (dateTo) dateTo.value = '';
         if (customDateRange) customDateRange.style.display = 'none';
+        this.currentSource = 'all';
+        ['tabSourceAll','tabSourcePos','tabSourceShop'].forEach(id => document.getElementById(id)?.classList.remove('active'));
+        document.getElementById('tabSourceAll')?.classList.add('active');
         
         this.filteredTransactions = this.transactions;
         this.currentPage = 1;
@@ -1408,7 +1470,7 @@ class TransactionManager {
         btns.forEach(btn => {
             if (btn.dataset.view === view) {
                 btn.classList.add('active');
-                btn.style.background = '#667eea';
+                btn.style.background = '#16a34a';
                 btn.style.color = 'white';
             } else {
                 btn.classList.remove('active');
@@ -1454,8 +1516,8 @@ class TransactionManager {
                 datasets: [{
                     label: 'Daily Revenue',
                     data: revenues,
-                    borderColor: '#667eea',
-                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    borderColor: '#16a34a',
+                    backgroundColor: 'rgba(22, 163, 74, 0.15)',
                     tension: 0.4,
                     fill: true
                 }]
@@ -1569,6 +1631,27 @@ class TransactionManager {
                         if (customDateRange) customDateRange.style.display = 'none';
                     }
                     this.filterTransactions();
+                });
+            }
+        });
+
+        // Source tabs
+        const sourceButtons = [
+            { id: 'tabSourceAll', value: 'all' },
+            { id: 'tabSourcePos', value: 'pos' },
+            { id: 'tabSourceShop', value: 'shop' },
+        ];
+        sourceButtons.forEach(tab => {
+            const el = document.getElementById(tab.id);
+            if (el) {
+                el.addEventListener('click', () => {
+                    this.currentSource = tab.value;
+                    sourceButtons.forEach(t => document.getElementById(t.id)?.classList.remove('active'));
+                    el.classList.add('active');
+                    // Reload from server with ?type= to ensure accurate dataset
+                    this.loadTransactions();
+                    // Refresh cards in real-time
+                    this.loadStats();
                 });
             }
         });

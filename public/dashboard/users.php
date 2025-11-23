@@ -218,7 +218,7 @@ require_once 'includes/header.php';
                         </div>
                         <div class="form-group">
                             <label for="email" class="form-label" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                <i class="fas fa-envelope" style="color: #667eea;"></i>
+                                <i class="fas fa-envelope" style="color: var(--primary-color);"></i>
                                 Email <span style="color: #ef4444;">*</span>
                             </label>
                             <input type="email" id="email" class="form-control" placeholder="Enter email" required style="width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.875rem;">
@@ -229,7 +229,7 @@ require_once 'includes/header.php';
                     <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
                         <div class="form-group">
                             <label for="role" class="form-label" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                <i class="fas fa-user-tag" style="color: #667eea;"></i>
+                                <i class="fas fa-user-tag" style="color: var(--primary-color);"></i>
                                 Role <span style="color: #ef4444;">*</span>
                             </label>
                             <select id="role" class="form-control" required style="width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.875rem; background: white;">
@@ -242,7 +242,7 @@ require_once 'includes/header.php';
                         </div>
                         <div class="form-group">
                             <label for="status" class="form-label" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                <i class="fas fa-toggle-on" style="color: #667eea;"></i>
+                                <i class="fas fa-toggle-on" style="color: var(--primary-color);"></i>
                                 Status <span style="color: #ef4444;">*</span>
                             </label>
                             <select id="status" class="form-control" required style="width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.875rem; background: white;">
@@ -257,7 +257,7 @@ require_once 'includes/header.php';
                         <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
                             <div class="form-group">
                                 <label for="password" class="form-label" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                    <i class="fas fa-lock" style="color: #667eea;"></i>
+                                    <i class="fas fa-lock" style="color: var(--primary-color);"></i>
                                     Password <span style="color: #ef4444;" id="passwordRequired">*</span>
                             </label>
                                 <div style="position: relative;">
@@ -270,7 +270,7 @@ require_once 'includes/header.php';
                         </div>
                             <div class="form-group">
                                 <label for="confirmPassword" class="form-label" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                    <i class="fas fa-lock" style="color: #667eea;"></i>
+                                    <i class="fas fa-lock" style="color: var(--primary-color);"></i>
                                     Confirm Password <span style="color: #ef4444;" id="confirmRequired">*</span>
                             </label>
                                 <div style="position: relative;">

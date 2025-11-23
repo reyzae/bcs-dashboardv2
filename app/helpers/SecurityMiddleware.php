@@ -40,8 +40,22 @@ class SecurityMiddleware {
      * Check CSRF token from request
      */
     public static function checkCsrfToken() {
-        $token = $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
-        
+        $token = $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_COOKIE['csrf_token'] ?? null);
+
+        // If Content-Type is JSON, attempt to read token from body
+        if (!$token) {
+            $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+            if (stripos($contentType, 'application/json') !== false) {
+                $raw = file_get_contents('php://input');
+                if ($raw) {
+                    $json = json_decode($raw, true);
+                    if (is_array($json) && isset($json['csrf_token'])) {
+                        $token = $json['csrf_token'];
+                    }
+                }
+            }
+        }
+
         if (!$token || !self::validateCsrfToken($token)) {
             http_response_code(403);
             header('Content-Type: application/json');

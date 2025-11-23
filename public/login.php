@@ -25,7 +25,7 @@ if (isset($_SESSION['user_id'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Bytebalok Dashboard</title>
     <meta name="description" content="Login to Bytebalok Business Management System">
-    <meta name="theme-color" content="#4f46e5">
+    <meta name="theme-color" content="#16a34a">
     
     <!-- Stylesheets -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -35,6 +35,7 @@ if (isset($_SESSION['user_id'])) {
     
     <style>
         /* Additional login page enhancements */
+        .login-page { --primary-color: #16a34a; --primary-dark: #15803d; }
         .login-card {
             animation: fadeInUp 0.5s ease-out;
         }

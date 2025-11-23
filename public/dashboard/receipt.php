@@ -83,6 +83,7 @@ $user_name = $_SESSION['user_name'] ?? 'User';
             margin: 0;
             font-size: 28px;
             font-weight: 700;
+            color: #000000;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         
@@ -270,14 +271,13 @@ $user_name = $_SESSION['user_name'] ?? 'User';
         }
         
         .btn-primary {
-            background: #6366f1;
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
             color: white;
         }
         
         .btn-primary:hover {
-            background: #4f46e5;
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+            box-shadow: 0 4px 12px rgba(22, 163, 74, 0.35);
         }
         
         .btn-secondary {
@@ -299,7 +299,7 @@ $user_name = $_SESSION['user_name'] ?? 'User';
         
         .loading-spinner {
             font-size: 48px;
-            color: #6366f1;
+            color: var(--primary-color);
             animation: spin 1s linear infinite;
         }
         

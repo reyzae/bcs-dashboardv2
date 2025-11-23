@@ -576,9 +576,10 @@ class ProductManager {
     }
 
     async editProduct(id, btn = null) {
+        // Preserve original button HTML across try/finally (block scope fix)
+        let originalHtml = btn ? btn.innerHTML : '';
         try {
             // Disable button and show spinner to prevent double-click
-            const originalHtml = btn ? btn.innerHTML : '';
             if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
 
             // Open form immediately with minimal fields; mark currentProductId

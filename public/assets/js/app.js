@@ -639,7 +639,7 @@ const Utils = {
     },
 
     // Resolve image URL with placeholder fallback (align with /shop checkout)
-    resolveImageUrl: (path, placeholder = '../assets/img/product-placeholder.jpg') => {
+    resolveImageUrl: (path, placeholder = '../assets/img/placeholder-product.svg') => {
         const abs = Utils.buildAbsoluteUrl(path);
         return abs || placeholder;
     },

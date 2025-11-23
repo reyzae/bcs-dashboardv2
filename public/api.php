@@ -67,8 +67,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // Apply security middleware
-// Production: 60 requests/minute, Development: 500 requests/minute
-$rateLimit = $isProduction ? 60 : 500;
+// Adaptive rate limit: allow higher throughput for safe GETs in production
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$rateLimit = $isProduction ? ($method === 'GET' ? 240 : 60) : 1000;
 SecurityMiddleware::rateLimit($rateLimit, 60);
 
 // Enforce CSRF for mutating requests in production
@@ -123,6 +124,7 @@ $validControllers = [
     'payment' => __DIR__ . '/../app/controllers/PaymentController.php',
     'pos' => __DIR__ . '/../app/controllers/PosController.php',
     'settings' => __DIR__ . '/../app/controllers/SettingsController.php',
+    'notification' => __DIR__ . '/../app/controllers/NotificationController.php',
 ];
 
 // Check if controller exists

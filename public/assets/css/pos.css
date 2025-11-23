@@ -158,7 +158,7 @@ body:has(.pos-main) .sidebar .sidebar-nav {
    COMPACT MODERN HEADER
    ============================================ */
 .pos-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
     padding: 0.75rem 1.5rem;
     display: flex;
     justify-content: space-between;
@@ -586,18 +586,18 @@ body:has(.pos-main) .sidebar .sidebar-header {
 }
 
 .products-grid::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
     border-radius: 10px;
 }
 
 .products-grid::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
 }
 
 /* Firefox */
 .products-grid {
     scrollbar-width: thin;
-    scrollbar-color: #667eea #f1f1f1;
+    scrollbar-color: var(--primary-color) #f1f1f1;
 }
 
 .product-card {
@@ -618,13 +618,13 @@ body:has(.pos-main) .sidebar .sidebar-header {
 
 .product-card:hover {
     border-color: var(--primary-color);
-    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
+    box-shadow: 0 8px 24px rgba(22, 163, 74, 0.18);
     transform: translateY(-4px);
 }
 
 .product-card:active {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.22);
 }
 
 .product-card.out-of-stock {
@@ -789,7 +789,7 @@ body:has(.pos-main) .sidebar .sidebar-header {
 .pos-right-panel {
     /* Firefox */
     scrollbar-width: thin;
-    scrollbar-color: #667eea #f1f1f1;
+    scrollbar-color: var(--primary-color) #f1f1f1;
 }
 
 .pos-right-panel::-webkit-scrollbar {
@@ -802,13 +802,13 @@ body:has(.pos-main) .sidebar .sidebar-header {
 }
 
 .pos-right-panel::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
     border-radius: 10px;
     transition: all 0.3s;
 }
 
 .pos-right-panel::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
 }
 
 /* Quick Actions Bar */
@@ -868,12 +868,12 @@ body:has(.pos-main) .sidebar .sidebar-header {
 
 .cart-header {
     padding: 1.25rem 1.5rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
     color: white;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.25);
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.25);
 }
 
 .cart-title {
@@ -1174,7 +1174,7 @@ body:has(.pos-main) .sidebar .sidebar-header {
 
 .section-header-compact i {
     font-size: 1.125rem;
-    color: #667eea;
+    color: var(--primary-color);
 }
 
 /* Customer Section - New Design */
@@ -1200,7 +1200,7 @@ body:has(.pos-main) .sidebar .sidebar-header {
 .customer-search i {
     position: absolute;
     left: 1rem;
-    color: #667eea;
+    color: var(--primary-color);
     font-size: 1rem;
     z-index: 1;
 }
@@ -1217,14 +1217,14 @@ body:has(.pos-main) .sidebar .sidebar-header {
 
 .customer-search input:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
 }
 
 .add-customer-btn {
     width: 48px;
     height: 48px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
     border: none;
     border-radius: 10px;
     color: white;
@@ -1234,12 +1234,12 @@ body:has(.pos-main) .sidebar .sidebar-header {
     align-items: center;
     justify-content: center;
     font-size: 1.125rem;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.25);
+    box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25);
 }
 
 .add-customer-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 6px 16px rgba(22, 163, 74, 0.4);
 }
 
 .add-customer-btn:active {
@@ -1249,7 +1249,7 @@ body:has(.pos-main) .sidebar .sidebar-header {
 .selected-customer-card {
     margin: 0 1.25rem 1rem;
     padding: 0.875rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
     border-radius: 12px;
     display: flex;
     align-items: center;
@@ -1354,15 +1354,15 @@ body:has(.pos-main) .sidebar .sidebar-header {
 
 .adjustment-input-group input:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.18);
 }
 
 .input-suffix {
     position: absolute;
     right: 0.875rem;
     bottom: 0.75rem;
-    color: #667eea;
+    color: var(--primary-color);
     font-size: 0.9375rem;
     font-weight: 700;
 }
@@ -1417,16 +1417,16 @@ body:has(.pos-main) .sidebar .sidebar-header {
 }
 
 .payment-method-btn:hover {
-    border-color: #667eea;
+    border-color: var(--primary-color);
     background: #f8f9fa;
     transform: translateY(-3px);
-    box-shadow: 0 6px 12px rgba(102, 126, 234, 0.15);
+    box-shadow: 0 6px 12px rgba(22, 163, 74, 0.18);
 }
 
 .payment-method-btn.active {
-    border-color: #667eea;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.35);
+    border-color: var(--primary-color);
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+    box-shadow: 0 6px 16px rgba(22, 163, 74, 0.35);
 }
 
 .payment-method-btn.active i,

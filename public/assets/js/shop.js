@@ -1,2196 +1,938 @@
-/**
- * Bytebalok Shop JavaScript
- * Handles customer-facing shop functionality
- */
-
-// Configuration
-const API_BASE = '../api.php';  // Use API router instead of direct controller access
-const STORAGE_KEY = 'bytebalok_cart';
-
-// Utility Functions
+const API_BASE = '../api.php'
+const STORAGE_KEY = 'bb_cart'
 const Utils = {
-    formatCurrency: (amount) => {
-        return new Intl.NumberFormat('id-ID', {
-            style: 'currency',
-            currency: 'IDR',
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0
-        }).format(amount);
-    },
-
-    formatDate: (date) => {
-        return new Date(date).toLocaleDateString('id-ID', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    },
-
-    // Build absolute URL from relative upload paths like "uploads/products/..."
-    buildAbsoluteUrl: (path) => {
-        if (!path) return null;
+  formatCurrency: (amount) => new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0,maximumFractionDigits:0}).format(Number(amount||0)),
+  apiCall: async (query, options={}) => {
+    const m = String(options.method||'GET').toUpperCase()
+    const baseHeaders = { 'Content-Type': 'application/json' }
+    if (m !== 'GET') {
+      const csrf = Utils.getCsrfToken()||''
+      baseHeaders['X-CSRF-Token'] = csrf
+      baseHeaders['X-Requested-With'] = 'XMLHttpRequest'
+      if (options.body) {
         try {
-            const trimmed = String(path).trim();
-            if (/^https?:\/\//i.test(trimmed)) return trimmed; // already absolute
-            if (trimmed.startsWith('/')) return `${window.location.origin}${trimmed}`;
-            // Normalize to "/<path>"
-            const normalized = trimmed.replace(/^\/+/, '');
-            return `${window.location.origin}/${normalized}`;
-        } catch (_) {
-            return null;
+          const isString = typeof options.body === 'string'
+          const payload = isString ? JSON.parse(options.body||'{}') : (options.body||{})
+          if (payload && typeof payload === 'object' && !payload.csrf_token) { payload.csrf_token = csrf }
+          options.body = JSON.stringify(payload)
+        } catch (e) {
+          options.body = JSON.stringify({ csrf_token: csrf })
         }
-    },
-
-    // Resolve image URL with placeholder fallback
-    resolveImageUrl: (path, placeholder = '../assets/img/product-placeholder.jpg') => {
-        const abs = Utils.buildAbsoluteUrl(path);
-        return abs || placeholder;
-    },
-
-    showToast: (message, type = 'info') => {
-        const toast = document.getElementById('toast');
-        if (!toast) return;
-
-        toast.textContent = message;
-        toast.className = `toast toast-${type} show`;
-
-        setTimeout(() => {
-            toast.classList.remove('show');
-        }, 3000);
-    },
-
-    showAdvancedToast: (message, type = 'info', icon = null) => {
-        // Create toast if doesn't exist
-        let toast = document.getElementById('toast-advanced');
-        if (!toast) {
-            toast = document.createElement('div');
-            toast.id = 'toast-advanced';
-            toast.className = 'toast-advanced';
-            document.body.appendChild(toast);
-        }
-
-        const icons = {
-            success: 'fa-check-circle',
-            error: 'fa-times-circle',
-            warning: 'fa-exclamation-triangle',
-            info: 'fa-info-circle'
-        };
-
-        toast.innerHTML = `
-            <div class="toast-content-advanced">
-                <i class="fas ${icon || icons[type]}"></i>
-                <span>${message}</span>
-            </div>
-        `;
-        
-        toast.className = `toast-advanced toast-${type} show`;
-        
-        setTimeout(() => {
-            toast.classList.remove('show');
-        }, 3000);
-    },
-
-    animateCartIcon: (buttonElement) => {
-        // Create flying icon
-        const rect = buttonElement.getBoundingClientRect();
-        const cartIcon = document.querySelector('.cart-button-clean');
-        if (!cartIcon) return;
-        
-        const cartRect = cartIcon.getBoundingClientRect();
-        
-        // Create clone
-        const clone = document.createElement('div');
-        clone.innerHTML = '<i class="fas fa-shopping-cart"></i>';
-        clone.style.cssText = `
-            position: fixed;
-            left: ${rect.left + rect.width / 2}px;
-            top: ${rect.top + rect.height / 2}px;
-            width: 30px;
-            height: 30px;
-            background: var(--primary-color);
-            color: white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10000;
-            pointer-events: none;
-            transition: all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-        `;
-        
-        document.body.appendChild(clone);
-        
-        // Animate
-        setTimeout(() => {
-            clone.style.left = `${cartRect.left + cartRect.width / 2}px`;
-            clone.style.top = `${cartRect.top + cartRect.height / 2}px`;
-            clone.style.transform = 'scale(0.5)';
-            clone.style.opacity = '0';
-        }, 10);
-        
-        setTimeout(() => {
-            clone.remove();
-            // Bounce cart icon
-            cartIcon.style.transform = 'scale(1.2)';
-            setTimeout(() => {
-                cartIcon.style.transform = 'scale(1)';
-            }, 200);
-        }, 600);
-    },
-
-    apiCall: async (endpoint, options = {}) => {
-        try {
-            const url = API_BASE + endpoint;
-            console.log('🌐 API Call:', url);
-            
-            const response = await fetch(url, options);
-            
-            // Get response text first to handle empty or invalid JSON
-            const text = await response.text();
-            console.log('📥 API Response (raw):', text.substring(0, 200));
-            
-            // Check if response is empty
-            if (!text || text.trim() === '') {
-                throw new Error('Empty response from server');
-            }
-            
-            // Try to parse as JSON
-            let data;
-            try {
-                data = JSON.parse(text);
-            } catch (jsonError) {
-                console.error('❌ JSON Parse Error:', jsonError);
-                console.error('📄 Response text:', text);
-                throw new Error(`Invalid JSON response: ${jsonError.message}. Response: ${text.substring(0, 100)}`);
-            }
-
-            if (!response.ok) {
-                throw new Error(data.error || data.message || `Request failed with status ${response.status}`);
-            }
-
-            return data;
-        } catch (error) {
-            console.error('❌ API Error:', error);
-            console.error('📍 Endpoint:', endpoint);
-            throw error;
-        }
+      } else {
+        options.body = JSON.stringify({ csrf_token: csrf })
+      }
     }
-};
-
-// Ephemeral success badge near the clicked button
-function showAddBadge(buttonElement, message = 'Ditambahkan') {
     try {
-        const card = buttonElement.closest('.product-card') || document.body;
-        const badge = document.createElement('div');
-        badge.className = 'added-badge';
-        badge.innerHTML = `<i class="fas fa-check"></i> ${message}`;
-        card.appendChild(badge);
-        const rect = buttonElement.getBoundingClientRect();
-        const x = rect.left + window.scrollX - 12;
-        const y = rect.top + window.scrollY - 12;
-        badge.style.left = x + 'px';
-        badge.style.top = y + 'px';
-        setTimeout(() => { badge.classList.add('hide'); setTimeout(() => badge.remove(), 400); }, 900);
-    } catch (e) {}
+      const res = await fetch(`${API_BASE}${query}`, { credentials:'include', headers:{ ...baseHeaders, ...(options.headers||{}) }, ...options })
+      const ct = res.headers.get('content-type')||''
+      if (!ct.includes('application/json')) { return { success:false, error:'Invalid response type' } }
+      const data = await res.json()
+      return data
+    } catch (e) {
+      return { success:false, error: e?.message||'Network error' }
+    }
+  },
+  getCsrfToken: () => {
+    const match = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/)
+    return match ? decodeURIComponent(match[1]) : null
+  },
+  buildImage: (path) => {
+    if (!path) return null
+    const t = String(path).trim()
+    if (/^https?:\/\//i.test(t)) return t
+    const n = t.replace(/^\/+/, '')
+    return `${window.location.origin}/${n}`
+  }
+}
+const ShopState = {
+  cart: JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'),
+  save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(this.cart)) },
+  add(product){
+    const idx = this.cart.findIndex(i=>i.id===product.id)
+    if (idx>=0){ this.cart[idx].qty += 1 } else { this.cart.push({ id: product.id, name: product.name, price: Number(product.price||0), image: product.image||'', qty: 1 }) }
+    this.save(); MiniCart.update()
+  },
+  remove(id){ this.cart = this.cart.filter(i=>i.id!==id); this.save(); MiniCart.update() },
+  updateQty(id, qty){ const item = this.cart.find(i=>i.id===id); if (!item) return; item.qty = Math.max(1, qty); this.save(); MiniCart.update() },
+  subtotal(){ return this.cart.reduce((s,i)=>s+(Number(i.price||0)*Number(i.qty||0)),0) }
+}
+const Catalog = {
+  products: [],
+  categories: [],
+  view: 'grid',
+  q: '',
+  sort: 'relevance',
+  activeFilters: new Set(),
+  async init(){ await this.loadCategories(); await this.loadProducts(); this.bindEvents(); MiniCart.update() },
+  async loadCategories(){ try { const r = await Utils.apiCall('?controller=category&action=list'); this.categories = r.data||[]; this.renderCategories() } catch(e){} },
+  async loadProducts(categoryId=null){ try {
+      const grid = document.getElementById('productsGrid'); const empty = document.getElementById('emptyState'); if (grid){ const ph = Array.from({length:8}).map(()=>`<div class="skeleton-card"><div class="skeleton-image"></div><div class="skeleton-content"><div class="skeleton-line" style="width:65%"></div><div class="skeleton-line" style="width:40%"></div></div></div>`).join(''); grid.innerHTML = ph; if (empty) empty.style.display='none' }
+      let endpoint = '?controller=product&action=list&limit=50&is_active=1'
+      if (categoryId) endpoint += `&category_id=${categoryId}`
+      if (this.q) endpoint += `&search=${encodeURIComponent(this.q)}`
+      const r = await Utils.apiCall(endpoint)
+      let p = r.data?.products || r.data || []
+      if (this.sort==='price_asc') p.sort((a,b)=>Number(a.price||0)-Number(b.price||0))
+      else if (this.sort==='price_desc') p.sort((a,b)=>Number(b.price||0)-Number(a.price||0))
+      else if (this.sort==='newest') p.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0))
+      this.products = p
+      this.renderProducts()
+    } catch(e){ this.products=[]; this.renderProducts() } },
+  bindEvents(){
+    const s = document.getElementById('searchInput'); if (s){ let t; s.addEventListener('input',()=>{ clearTimeout(t); t=setTimeout(()=>{ this.q=s.value; this.loadProducts() },300) }) }
+    const sortSel = document.getElementById('sortSelect'); if (sortSel){ sortSel.addEventListener('change',()=>{ this.sort=sortSel.value; this.loadProducts() }) }
+    const viewGrid = document.getElementById('viewGrid'); const viewList = document.getElementById('viewList');
+    if (viewGrid && viewList){ viewGrid.addEventListener('click',()=>{ this.view='grid'; viewGrid.classList.add('active'); viewList.classList.remove('active'); this.renderProducts() }); viewList.addEventListener('click',()=>{ this.view='list'; viewList.classList.add('active'); viewGrid.classList.remove('active'); this.renderProducts() }) }
+    const reset = document.getElementById('resetFilters'); if (reset){ reset.addEventListener('click',()=>{ this.q=''; if (s) s.value=''; this.activeFilters.clear(); this.loadProducts() }) }
+  },
+  renderCategories(){ const nav = document.getElementById('categoriesNav'); if (!nav) return; nav.innerHTML = ['<a href="#" data-cat="all" class="filter-chip active">Semua</a>'].concat(this.categories.map(c=>`<a href="#" data-cat="${c.id}" class="filter-chip">${c.name}</a>`)).join('');
+    nav.querySelectorAll('a').forEach(a=>{ a.addEventListener('click',(e)=>{ e.preventDefault(); nav.querySelectorAll('a').forEach(n=>n.classList.remove('active')); a.classList.add('active'); const id = a.getAttribute('data-cat'); this.loadProducts(id==='all'?null:id) }) }) },
+  renderProducts(){ const grid = document.getElementById('productsGrid'); const empty = document.getElementById('emptyState'); if (!grid) return; if (!this.products.length){ grid.innerHTML=''; if (empty) empty.style.display='grid'; return } if (empty) empty.style.display='none';
+    const cls = this.view==='list' ? 'products-list' : ''
+    grid.className = `products-grid ${cls}`
+    grid.innerHTML = this.products.map(p=>{
+      const img = Utils.buildImage(p.image_url||p.image)
+      const inCart = ShopState.cart.find(x=>String(x.id)===String(p.id))
+      const qty = Number(inCart?.qty||0)
+      return `
+        <div class="product-card">
+          <img class="product-image" src="${img||''}" alt="${p.name||''}" onerror="this.style.display='none'">
+          <div class="product-info">
+            <div class="product-title">${p.name||''}</div>
+            <div class="product-price">${Utils.formatCurrency(p.price||0)}</div>
+            <div class="product-actions-row">
+              <button class="btn btn-primary" data-id="${p.id}" data-role="add">Tambah</button>
+              <div class="quantity-control" data-id="${p.id}">
+                <button class="quantity-btn" data-act="dec" data-id="${p.id}"><i class="fas fa-minus"></i></button>
+                <input class="quantity-input" type="text" value="${qty}" readonly data-id="${p.id}">
+                <button class="quantity-btn" data-act="inc" data-id="${p.id}"><i class="fas fa-plus"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>`
+    }).join('')
+    const updateQtyUI = (id)=>{ const input = grid.querySelector(`.quantity-input[data-id="${id}"]`); const dec = grid.querySelector(`.quantity-btn[data-act="dec"][data-id="${id}"]`); const item = ShopState.cart.find(x=>String(x.id)===String(id)); const v = Number(item?.qty||0); if (input){ input.value = v; input.classList.remove('qty-bump'); void input.offsetWidth; input.classList.add('qty-bump') } if (dec) dec.disabled = v<=0 }
+    grid.querySelectorAll('button[data-role="add"]').forEach(btn=>{ btn.addEventListener('click',()=>{ const id = btn.getAttribute('data-id'); const prod = this.products.find(x=>String(x.id)===String(id)); if (!prod) return; ShopState.add({ id: prod.id, name: prod.name, price: prod.price, image: prod.image_url||prod.image }); updateQtyUI(id) }) })
+    grid.querySelectorAll('button.quantity-btn[data-act="inc"]').forEach(btn=>{ btn.addEventListener('click',()=>{ const id = btn.getAttribute('data-id'); const prod = this.products.find(x=>String(x.id)===String(id)); if (!prod) return; ShopState.add({ id: prod.id, name: prod.name, price: prod.price, image: prod.image_url||prod.image }); updateQtyUI(id) }) })
+    grid.querySelectorAll('button.quantity-btn[data-act="dec"]').forEach(btn=>{ btn.addEventListener('click',()=>{ const id = btn.getAttribute('data-id'); const item = ShopState.cart.find(x=>String(x.id)===String(id)); if (!item) { updateQtyUI(id); return } const nextQty = Number(item.qty||0)-1; if (nextQty<=0){ ShopState.remove(item.id) } else { ShopState.updateQty(item.id, nextQty) } updateQtyUI(id) }) })
+    grid.querySelectorAll('.quantity-input[data-id]').forEach(inp=>{ const id = inp.getAttribute('data-id'); updateQtyUI(id) })
+  }
+}
+const MiniCart = {
+  update(){ 
+    const countEl = document.getElementById('miniCartCount'); 
+    const subEl = document.getElementById('miniCartSubtotal'); 
+    const cartBadge = document.getElementById('cartBadge');
+    
+    if (!countEl||!subEl) return; 
+    
+    const items = ShopState.cart.reduce((s,i)=>s+Number(i.qty||0),0); 
+    countEl.textContent = `${items} item`; 
+    subEl.textContent = Utils.formatCurrency(ShopState.subtotal());
+    
+    // Update cart badge in header
+    if (cartBadge) {
+      if (items > 0) {
+        cartBadge.textContent = items;
+        cartBadge.style.display = 'block';
+      } else {
+        cartBadge.style.display = 'none';
+      }
+    }
+  }
+}
+const CartPage = {
+  async init(){ 
+    // Load tax settings first
+    await loadTaxSettings();
+    
+    const container = document.getElementById('cartItems'); if (!container) return; const items = ShopState.cart; if (!items.length){ container.innerHTML = `<div class="empty-state"><div class="empty-icon"><i class="fas fa-shopping-cart"></i></div><div class="empty-title">Keranjang kosong</div><div class="empty-description">Ayo tambahkan produk favoritmu ke keranjang</div><a href="index.php" class="btn btn-primary"><i class="fas fa-arrow-left"></i> Lanjut Belanja</a></div>`; CartPage.updateSummary(); return }
+    container.innerHTML = items.map(i=>`
+      <div class="cart-item">
+        <img src="${Utils.buildImage(i.image)||''}" alt="${i.name||''}" onerror="this.style.display='none'">
+        <div class="cart-item-info">
+          <div class="cart-item-name">${i.name}</div>
+          <div class="quantity-control">
+            <button class="quantity-btn" data-act="dec" data-id="${i.id}"><i class="fas fa-minus"></i></button>
+            <input type="number" min="1" value="${i.qty}" data-id="${i.id}" class="quantity-input">
+            <button class="quantity-btn" data-act="inc" data-id="${i.id}"><i class="fas fa-plus"></i></button>
+            <button class="btn btn-ghost btn-sm" data-act="rm" data-id="${i.id}"><i class="fas fa-trash"></i></button>
+          </div>
+        </div>
+        <div class="price text-lg">${Utils.formatCurrency(i.price*i.qty)}</div>
+      </div>`).join('')
+    container.querySelectorAll('button[data-act]').forEach(b=>{ b.addEventListener('click',()=>{ const id=b.getAttribute('data-id'); const act=b.getAttribute('data-act'); const item = ShopState.cart.find(x=>String(x.id)===String(id)); if(!item) return; if (act==='inc'){ ShopState.updateQty(item.id, item.qty+1) } else if (act==='dec'){ ShopState.updateQty(item.id, item.qty-1) } else if (act==='rm'){ ShopState.remove(item.id) } CartPage.init() }) })
+    container.querySelectorAll('input[type=number][data-id]').forEach(inp=>{ inp.addEventListener('change',()=>{ const id=inp.getAttribute('data-id'); const v=parseInt(inp.value||'1',10); ShopState.updateQty(Number(id), v) ; CartPage.init() }) })
+    
+    // Add clear cart functionality
+    const clearBtn = document.getElementById('clearCart');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        if (confirm('Apakah Anda yakin ingin mengosongkan keranjang?')) {
+          ShopState.cart = [];
+          ShopState.save();
+          CartPage.init();
+          MiniCart.update();
+        }
+      });
+    }
+    
+    CartPage.updateSummary()
+  },
+  updateSummary(){ 
+    const sub = ShopState.subtotal(); 
+    const ship = sub>0? 0 : 0; 
+    
+    // Calculate tax if enabled
+    let tax = 0;
+    const taxSettings = window.taxSettings || {};
+    if (taxSettings.enabled && taxSettings.rate > 0) {
+      tax = sub * (taxSettings.rate / 100);
+    }
+    
+    const total = sub + ship + tax;
+    
+    // Update UI
+    const sS=document.getElementById('summarySubtotal'); 
+    const sH=document.getElementById('summaryShipping'); 
+    const sTax=document.getElementById('summaryTax');
+    const taxRow=document.getElementById('taxRow');
+    const sT=document.getElementById('summaryTotal'); 
+    
+    if(sS) sS.textContent = Utils.formatCurrency(sub); 
+    if(sH) sH.textContent = Utils.formatCurrency(ship);
+    
+    // Show/hide tax row
+    if (taxSettings.enabled && tax > 0) {
+      if(sTax) sTax.textContent = Utils.formatCurrency(tax);
+      if(taxRow) taxRow.style.display = 'flex';
+    } else {
+      if(taxRow) taxRow.style.display = 'none';
+    }
+    
+    if(sT) sT.textContent = Utils.formatCurrency(total);
+  }
 }
 
-// Shopping Cart Manager
-const ShopCart = {
-    getCart: () => {
-        const cart = localStorage.getItem(STORAGE_KEY);
-        return cart ? JSON.parse(cart) : [];
-    },
+// Fungsi validasi form customer
+function validateCustomerForm() {
+  const name = document.getElementById('customerName')?.value?.trim();
+  const phone = document.getElementById('customerPhone')?.value?.trim();
+  const address = document.getElementById('customerAddress')?.value?.trim();
+  
+  // Validasi nama wajib diisi
+  if (!name) {
+    return { valid: false, message: 'Nama lengkap wajib diisi' };
+  }
+  
+  // Validasi nomor HP wajib diisi
+  if (!phone) {
+    return { valid: false, message: 'Nomor HP wajib diisi untuk pengiriman invoice via WhatsApp' };
+  }
+  
+  // Validasi format nomor HP (minimal 10 digit)
+  if (!/^\d{10,}$/.test(phone.replace(/[^\d]/g, ''))) {
+    return { valid: false, message: 'Nomor HP tidak valid (minimal 10 digit)' };
+  }
+  
+  // Cek apakah COD aktif dan validasi alamat
+  const codEnabled = window.codSettings?.enabled || false;
+  if (codEnabled && !address) {
+    return { valid: false, message: 'Alamat lengkap wajib diisi untuk pengiriman COD' };
+  }
+  
+  return { valid: true };
+}
 
-    saveCart: (cart) => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(cart));
-        ShopCart.updateCartCount();
-        // Reflect UI changes when on cart page
-        try { ShopCart.updateCartDisplay(); } catch (e) { /* no-op */ }
-    },
+// Fungsi untuk load COD settings
+async function loadCodSettings() {
+  try {
+    const response = await fetch('../api.php?controller=settings&action=get_public');
+    const result = await response.json();
+    if (result.success && result.data) {
+      window.codSettings = {
+        enabled: result.data.cod_enabled === '1' || result.data.cod_enabled === true
+      };
+      updateAddressRequirement();
+    }
+  } catch (error) {
+    console.error('Failed to load COD settings:', error);
+    window.codSettings = { enabled: false };
+  }
+}
 
-    addToCart: (product, quantity = 1) => {
-        let cart = ShopCart.getCart();
-        const existingItem = cart.find(item => item.id === product.id);
+// Fungsi untuk load tax settings
+async function loadTaxSettings() {
+  try {
+    const response = await fetch('../api.php?controller=settings&action=get_public');
+    const result = await response.json();
+    if (result.success && result.data) {
+      // Map shop-specific tax settings from the API response
+      window.taxSettings = {
+        enabled: result.data.tax_enabled === '1' || result.data.tax_enabled === true,
+        rate: parseFloat(result.data.tax_rate) || 11,
+        name: result.data.tax_name || 'Pajak'
+      };
+      // Update tax label if exists
+      const taxLabel = document.querySelector('#taxRow .text-gray-600');
+      if (taxLabel && window.taxSettings.name) {
+        taxLabel.textContent = window.taxSettings.name;
+      }
+      // Update cart summary
+      CartPage.updateSummary();
+    }
+  } catch (error) {
+    console.error('Failed to load tax settings:', error);
+    window.taxSettings = { enabled: false, rate: 11, name: 'Pajak' };
+  }
+}
 
-        // Normalize and clamp quantity to stock
-        const maxQty = (typeof product.stock_quantity === 'number' && product.stock_quantity > 0)
-            ? parseInt(product.stock_quantity, 10)
-            : Number.MAX_SAFE_INTEGER;
-        quantity = Math.max(1, parseInt(quantity, 10) || 1);
-
-        if (existingItem) {
-            existingItem.quantity = Math.min((existingItem.quantity || 0) + quantity, maxQty);
-            existingItem.stock_quantity = product.stock_quantity;
-        } else {
-            cart.push({
-                id: product.id,
-                name: product.name,
-                price: product.price,
-                image: product.image,
-                quantity: Math.min(quantity, maxQty),
-                stock_quantity: product.stock_quantity
-            });
+// Fungsi untuk update tampilan requirement alamat
+function updateAddressRequirement() {
+  const codEnabled = window.codSettings?.enabled || false;
+  const addressLabel = document.getElementById('addressRequired');
+  const addressInput = document.getElementById('customerAddress');
+  
+  if (addressLabel) {
+    if (codEnabled) {
+      addressLabel.innerHTML = '<span class="text-danger-500" title="Wajib diisi untuk COD">*</span>';
+      if (addressInput) addressInput.required = true;
+    } else {
+      addressLabel.textContent = '(Opsional)';
+      if (addressInput) addressInput.required = false;
+    }
+  }
+}
+const CheckoutPage = {
+  async init(){ 
+    await loadCodSettings();
+    await loadTaxSettings();
+    
+    const wrap = document.getElementById('checkoutSummary');
+    if(!wrap) return;
+    const items = ShopState.cart;
+    if (!items.length) {
+      wrap.innerHTML = `<div class="empty-state"><div class="empty-icon"><i class="fas fa-shopping-cart"></i></div><div class="empty-title">Keranjang kosong</div><a href="index.php" class="btn btn-secondary"><i class="fas fa-arrow-left mr-2"></i>Lanjut Belanja</a></div>`;
+    } else {
+      const sub = ShopState.subtotal();
+      const taxSettings = window.taxSettings || { enabled: false, rate: 0, name: 'Pajak' };
+      const tax = (taxSettings.enabled && taxSettings.rate > 0) ? (sub * (taxSettings.rate/100)) : 0;
+      const total = sub + tax;
+      const rows = items.map((i,idx)=>`<div class="summary-row"><span>${idx+1}. ${i.name} × ${i.qty}</span><span class="price">${Utils.formatCurrency(i.price*i.qty)}</span></div>`).join('');
+      const taxRow = (taxSettings.enabled && tax > 0) ? `<div class="summary-row"><span>${taxSettings.name||'Pajak'}</span><span class="price">${Utils.formatCurrency(tax)}</span></div>` : '';
+      wrap.innerHTML = `${rows}<div class="summary-divider"></div><div class="summary-row"><span>Subtotal</span><span class="price">${Utils.formatCurrency(sub)}</span></div>${taxRow}<div class="summary-total"><span>Total</span><span class="price font-bold">${Utils.formatCurrency(total)}</span></div>`;
+    }
+    const btn = document.getElementById('placeOrderBtn'); if(btn){ btn.addEventListener('click', async ()=>{
+        if(!ShopState.cart.length) return;
+        
+        // Validasi form
+        const validation = validateCustomerForm();
+        if (!validation.valid) {
+          alert(validation.message);
+          return;
         }
-
-        ShopCart.saveCart(cart);
-        // Immediately reflect changes in UI (e.g., when on cart page)
-        try { ShopCart.updateCartDisplay(); } catch (e) { /* noop */ }
-    },
-
-    updateQuantity: (productId, quantity) => {
-        let cart = ShopCart.getCart();
-        const item = cart.find(item => item.id === productId);
-
-        if (item) {
-            if (quantity <= 0) {
-                cart = cart.filter(item => item.id !== productId);
-            } else {
-                item.quantity = quantity;
-            }
-            ShopCart.saveCart(cart);
-            // Soft animation feedback on row
-            try {
-                const row = document.querySelector(`.cart-item[data-id="${productId}"]`);
-                if (row) {
-                    row.classList.add('pulse');
-                    setTimeout(() => row.classList.remove('pulse'), 350);
-                }
-            } catch (e) {}
+        
+        const pay = document.querySelector('input[name="pay"]:checked')?.value || 'transfer'
+        const payload = {
+          customer_name: document.getElementById('customerName')?.value||'',
+          customer_phone: document.getElementById('customerPhone')?.value||'',
+          customer_email: document.getElementById('customerEmail')?.value||'',
+          customer_address: document.getElementById('customerAddress')?.value||'',
+          payment_method: pay,
+          items: ShopState.cart.map(i=>({product_id:i.id, quantity:i.qty}))
         }
-    },
+        try {
+          const r = await Utils.apiCall('?controller=order&action=create', { method:'POST', body: JSON.stringify(payload) })
+          if (r?.success){
+            ShopState.cart=[]; ShopState.save();
+            PaymentSheet.show(r.data)
+          } else {
+            const msg = r?.message || 'Gagal membuat pesanan'
+            console.error('Order create failed:', r)
+            alert(msg)
+          }
+        } catch(e){
+          console.error('Order create error:', e)
+          alert('Terjadi kesalahan jaringan saat membuat pesanan')
+        }
+    }) }
 
-    removeFromCart: (productId) => {
-        // Animate fade-out then remove
-        const row = document.querySelector(`.cart-item[data-id="${productId}"]`);
-        if (row) {
-            row.classList.add('fade-out');
+    // Persist & restore payment method selection
+    const radios = Array.from(document.querySelectorAll('input[name="pay"]'))
+    const lastPay = localStorage.getItem('bb_last_pay')
+    if (lastPay) {
+      const r = radios.find(x => x.value === lastPay && !x.disabled)
+      if (r) r.checked = true
+    }
+    radios.forEach(r => {
+      r.addEventListener('change', () => {
+        localStorage.setItem('bb_last_pay', r.value)
+      })
+    })
+  }
+}
+const PaymentSheet = {
+  el: null,
+  poller: null,
+  deadline: null,
+  bankSettings: null,
+  
+  // Load bank settings from API
+  async loadBankSettings() {
+    if (this.bankSettings) return this.bankSettings;
+    
+    try {
+      // Use public endpoint that doesn't require authentication
+      const response = await fetch('../api.php?controller=settings&action=get_public_banks');
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        this.bankSettings = {
+          default: result.data.bank_default || 'bca',
+          bca: {
+            name: result.data.bank_bca_name || 'Bytebalok',
+            account: result.data.bank_bca_account || '1234567890'
+          },
+          bri: {
+            name: result.data.bank_bri_name || result.data.bank_mandiri_name || 'Bytebalok',
+            account: result.data.bank_bri_account || result.data.bank_mandiri_account || '1234567890'
+          },
+          blu_bca: {
+            name: result.data.bank_blu_bca_name || result.data.bank_bni_name || 'Bytebalok',
+            account: result.data.bank_blu_bca_account || result.data.bank_bni_account || '1234567890'
+          }
+        };
+        console.log('Bank settings loaded:', this.bankSettings);
+        return this.bankSettings;
+      }
+    } catch (error) {
+      console.error('Failed to load bank settings:', error);
+      // Return default settings
+      this.bankSettings = {
+        default: 'bca',
+        bca: { name: 'Bytebalok', account: '1234567890' },
+        bri: { name: 'Bytebalok', account: '1234567890' },
+        blu_bca: { name: 'Bytebalok', account: '1234567890' }
+      };
+      console.log('Using default bank settings:', this.bankSettings);
+      return this.bankSettings;
+    }
+  },
+  
+  // Get bank display data based on method and payment data
+  getBankDisplayData(method, paymentData) {
+    const bankKey = method === 'transfer' ? this.bankSettings?.default || 'bca' : method
+    const bankInfo = this.bankSettings?.[bankKey] || this.bankSettings?.bca
+    
+    return {
+      bank_name: paymentData.bank_name || this.getBankDisplayName(bankKey),
+      account_name: paymentData.account_name || bankInfo?.name || 'Bytebalok',
+      account_number: paymentData.account_number || bankInfo?.account || '1234567890',
+      virtual_account: paymentData.virtual_account || '-',
+      reference_number: paymentData.reference_number || '-'
+    }
+  },
+  
+  // Get bank display name
+  getBankDisplayName(bankKey) {
+    const names = {
+      'bca': 'Bank BCA',
+      'bri': 'Bank BRI', 
+      'blu_bca': 'BLU BCA',
+      'mandiri': 'Bank Mandiri',
+      'bni': 'Bank BNI'
+    }
+    return names[bankKey] || 'Bank Transfer'
+  },
+  
+  // Create bank info HTML with consistent design
+  createBankInfoHTML(bankData) {
+    return `
+      <div class="bank-info-box">
+        <div class="bank-info-header">
+          <i class="fas fa-building"></i>
+          <span class="bank-name">${bankData.bank_name}</span>
+        </div>
+        <div class="bank-info-content">
+          <div class="bank-info-row">
+            <span class="label">Nama Rekening:</span>
+            <span class="value">${bankData.account_name}</span>
+          </div>
+          <div class="bank-info-row">
+            <span class="label">Nomor Rekening:</span>
+            <span class="value account-number">${bankData.account_number}</span>
+          </div>
+          ${bankData.virtual_account !== '-' ? `
+            <div class="bank-info-row">
+              <span class="label">Virtual Account:</span>
+              <span class="value">${bankData.virtual_account}</span>
+            </div>
+          ` : ''}
+          ${bankData.reference_number !== '-' ? `
+            <div class="bank-info-row">
+              <span class="label">Nomor Referensi:</span>
+              <span class="value">${bankData.reference_number}</span>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `
+  },
+  
+  async show(order){
+    console.log('PaymentSheet.show() called with order:', order)
+    this.el = this.el || document.getElementById('paymentSheet')
+    if(!this.el) return
+    
+    // Load bank settings first
+    await this.loadBankSettings()
+    
+    const method = order?.payment_method || order?.payment?.payment_method || ''
+    const total = order?.total_amount || 0
+    const num = order?.order_number || ''
+    const p = order?.payment || {}
+    const mLabel = document.getElementById('paymentMethodLabel')
+    const qrImg = document.getElementById('qrisImage')
+    const transferSection = document.getElementById('transferSection')
+    const transferDetails = document.getElementById('transferDetails')
+    const meta = document.getElementById('paymentMeta')
+    console.log('Payment method:', method)
+    console.log('QR image element:', qrImg)
+    const sum = document.getElementById('paymentOrderSummary')
+    const totalEl = document.getElementById('paymentTotal')
+    const link = document.getElementById('trackOrderLink')
+    const verifyBtn = document.getElementById('requestVerificationBtn')
+    // Insert instruction note near verification button
+    try {
+      const existingNote = document.getElementById('verificationNote')
+      const buttonsWrap = verifyBtn ? verifyBtn.parentElement : document.querySelector('.payment-right .mt-4.space-y-3')
+      if (!existingNote && buttonsWrap) {
+        const note = document.createElement('div')
+        note.id = 'verificationNote'
+        note.className = 'text-sm text-gray-600'
+        note.innerHTML = '<i class="fas fa-info-circle mr-1"></i> Jika sudah melakukan pembayaran, mohon klik tombol <strong>Verifikasi Pembayaran</strong> agar pesanan segera diproses.'
+        buttonsWrap.insertBefore(note, verifyBtn || buttonsWrap.firstChild)
+      }
+    } catch(e){}
+    
+    // Update payment method with icon
+    if(mLabel){
+      const methodIcon = method === 'qris' ? 'fa-qrcode' : 'fa-university'
+      mLabel.innerHTML = `<i class="fas ${methodIcon}"></i> ${method==='qris' ? 'QRIS' : 'Transfer Bank'}`
+    }
+    
+    // Update payment info based on method
+    if(method==='qris'){
+      const qrisSection = document.getElementById('qrisSection')
+      if(qrisSection) {
+        qrisSection.style.display = 'block'
+        console.log('QRIS section displayed')
+        console.log('QRIS section display style:', qrisSection.style.display)
+        console.log('QRIS section visibility:', window.getComputedStyle(qrisSection).display)
+      }
+      if(qrImg){ 
+        console.log('QR image element found:', qrImg)
+        console.log('QR image current display:', window.getComputedStyle(qrImg).display)
+        console.log('QR image current visibility:', window.getComputedStyle(qrImg).visibility)
+        // Set display block dulu sebelum set src
+        qrImg.style.display = 'block'
+        // Tambahkan delay kecil untuk memastikan DOM siap
+        setTimeout(() => {
+          // Coba dengan placeholder dulu untuk debugging
+          qrImg.src = '../assets/img/placeholder-product.svg'; 
+          console.log('Setting QRIS image src to placeholder for debugging')
+          qrImg.onload = () => {
+            console.log('Placeholder image loaded successfully')
+            // Setelah placeholder berhasil, coba dengan QRIS image
             setTimeout(() => {
-                let cart = ShopCart.getCart();
-                cart = cart.filter(item => item.id !== productId);
-                ShopCart.saveCart(cart);
-                Utils.showToast('Item removed from cart', 'info');
-            }, 180);
+              qrImg.src = '/assets/img/qris-gopay.svg'; 
+              qrImg.onerror = function(){ this.src = '/assets/img/qris-gopay.svg' }
+              console.log('Setting QRIS image src to:', qrImg.src)
+            }, 500)
+          }
+          qrImg.onerror = (e) => console.error('Failed to load image:', e)
+        }, 100)
+      } else {
+        console.error('QR image element not found')
+      }
+    } else {
+      const qrisSection = document.getElementById('qrisSection')
+      if(qrisSection) qrisSection.style.display = 'none'
+      if(qrImg) qrImg.style.display = 'none'
+      if(transferSection){
+        transferSection.style.display = 'block'
+        console.log('Transfer section found, displaying bank info')
+        // Get bank settings for display
+        const bankData = this.getBankDisplayData(method, p)
+        console.log('Bank data for display:', bankData)
+        if(transferDetails) {
+          transferDetails.innerHTML = this.createBankInfoHTML(bankData)
+          console.log('Bank info HTML created and inserted')
         } else {
-            let cart = ShopCart.getCart();
-            cart = cart.filter(item => item.id !== productId);
-            ShopCart.saveCart(cart);
-            Utils.showToast('Item removed from cart', 'info');
+          console.error('Transfer details element not found!')
         }
-    },
-
-    clearCart: () => {
-        localStorage.removeItem(STORAGE_KEY);
-        ShopCart.updateCartCount();
-    },
-
-    getTotal: () => {
-        const cart = ShopCart.getCart();
-        return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
-    },
-
-    getTax: () => {
-        // Compute tax based on public shop settings
-        const subtotal = ShopCart.getTotal();
-        // Apply discount before tax if promo exists (align with POS behavior)
-        let discount = 0;
-        if (window.PromoCodeManager && typeof PromoCodeManager.calculateDiscount === 'function') {
-            discount = PromoCodeManager.calculateDiscount(subtotal) || 0;
-        }
-        const taxableAmount = Math.max(0, subtotal - discount);
-
-        if (window.ShopSettings && ShopSettings.enableTaxShop) {
-            const rate = parseFloat(ShopSettings.taxRateShop) || 0;
-            return taxableAmount * (rate / 100);
-        }
-        return 0;
-    },
-
-    getGrandTotal: () => {
-        return ShopCart.getTotal() + ShopCart.getTax();
-    },
-
-    updateCartCount: () => {
-        const cart = ShopCart.getCart();
-        const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
-        const cartCountElements = document.querySelectorAll('#cartCount, .cart-count');
-        
-        cartCountElements.forEach(element => {
-            element.textContent = totalItems;
-            element.style.display = totalItems > 0 ? 'inline-block' : 'none';
-        });
-    },
-
-    loadCart: () => {
-        const cart = ShopCart.getCart();
-        const container = document.getElementById('cartItemsContainer');
-        const emptyCart = document.getElementById('cartEmpty');
-        const summary = document.getElementById('cartSummary');
-
-        if (!container) return;
-
-        if (cart.length === 0) {
-            if (emptyCart) emptyCart.style.display = 'block';
-            if (summary) summary.style.display = 'none';
-            container.innerHTML = '';
-            return;
-        }
-
-        if (emptyCart) emptyCart.style.display = 'none';
-        if (summary) summary.style.display = 'block';
-
-        container.innerHTML = cart.map(item => `
-            <div class="cart-item" data-id="${item.id}">
-                <img src="${Utils.resolveImageUrl(item.image, '../assets/img/no-image.svg')}" 
-                     alt="${item.name}" 
-                     class="cart-item-image">
-                
-                <div class="cart-item-info">
-                    <h3 class="cart-item-name">${item.name}</h3>
-                    <p class="cart-item-price">${Utils.formatCurrency(item.price)}</p>
-                    
-                    <div class="cart-item-quantity">
-                    <button class="quantity-btn" aria-label="Kurangi jumlah" onclick="ShopCart.updateQuantity(${item.id}, ${item.quantity - 1})">
-                        <i class="fas fa-minus"></i>
-                    </button>
-                        <input type="number" aria-label="Jumlah" value="${item.quantity}" min="1" max="${item.stock_quantity || item.stock || ''}" 
-                               onchange="ShopCart.updateQuantity(${item.id}, parseInt(this.value))">
-                        <button class="quantity-btn" aria-label="Tambah jumlah" onclick="ShopCart.updateQuantity(${item.id}, ${item.quantity + 1})">
-                        <i class="fas fa-plus"></i>
-                    </button>
-                    </div>
-                </div>
-                
-                <div class="cart-item-actions">
-                    <div class="cart-item-total">${Utils.formatCurrency(item.price * item.quantity)}</div>
-                    <button class="remove-item-btn" onclick="ShopCart.removeFromCart(${item.id})">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </div>
-        `).join('');
-
-        ShopCart.updateSummary();
-    },
-
-    updateSummary: () => {
-        const subtotal = ShopCart.getTotal();
-        const tax = ShopCart.getTax();
-        const total = ShopCart.getGrandTotal();
-
-        // Update elements that exist
-        const updateElement = (id, value) => {
-            const element = document.getElementById(id);
-            if (element) element.textContent = Utils.formatCurrency(value);
-        };
-
-        updateElement('summarySubtotal', subtotal);
-        updateElement('summaryTax', tax);
-        updateElement('summaryShipping', 0);
-        updateElement('summaryTotal', total);
-
-        updateElement('checkoutSubtotal', subtotal);
-        updateElement('checkoutTax', tax);
-        updateElement('checkoutShipping', 0);
-        updateElement('checkoutTotal', total);
-
-        // Update tax labels based on ShopSettings
-        const summaryTaxLabel = document.getElementById('summaryTaxLabel');
-        const checkoutTaxLabel = document.getElementById('checkoutTaxLabel');
-        const labelText = (window.ShopSettings && ShopSettings.enableTaxShop)
-            ? `Tax (${parseFloat(ShopSettings.taxRateShop) || 0}%)`
-            : 'Tax (Inactive)';
-        if (summaryTaxLabel) summaryTaxLabel.textContent = labelText;
-        if (checkoutTaxLabel) checkoutTaxLabel.textContent = labelText;
-        const summaryTaxRow = summaryTaxLabel ? summaryTaxLabel.closest('.summary-row') : null;
-        if (summaryTaxRow) summaryTaxRow.style.display = (window.ShopSettings && ShopSettings.enableTaxShop) || tax > 0 ? 'flex' : 'none';
-        const summaryShippingEl = document.getElementById('summaryShipping');
-        const summaryShippingRow = summaryShippingEl ? summaryShippingEl.closest('.summary-row') : null;
-        if (summaryShippingRow) summaryShippingRow.style.display = 'none';
-    },
-
-    updateCartDisplay: () => {
-        ShopCart.updateCartCount();
-        if (window.location.pathname.includes('cart.php')) {
-            ShopCart.loadCart();
-        }
+      } else {
+        console.error('Transfer section element not found!')
+      }
     }
-};
-
-// Product Catalog
-const ShopCatalog = {
-    currentCategory: 'all',
-    products: [],
-    categories: [],
-
-    initialize: async () => {
-        await ShopCatalog.loadCategories();
-        await ShopCatalog.loadProducts();
-        ShopCatalog.setupEventListeners();
-    },
-
-    loadCategories: async () => {
-        try {
-            const response = await Utils.apiCall('?controller=category&action=list');
-            ShopCatalog.categories = response.data || [];
-            ShopCatalog.renderCategories();
-        } catch (error) {
-            console.error('Failed to load categories:', error);
-        }
-    },
-
-    loadProducts: async (categoryId = null) => {
-        try {
-            // Tampilkan skeleton saat loading
-            if (window.SkeletonLoader && typeof SkeletonLoader.show === 'function') {
-                SkeletonLoader.show('skeletonGrid');
-            }
-
-            // Hanya tampilkan produk aktif untuk pelanggan (fallback jika kosong)
-            let endpoint = '?controller=product&action=list&limit=50&is_active=1';
-            if (categoryId) {
-                endpoint += `&category_id=${categoryId}`;
-            }
-
-            const response = await Utils.apiCall(endpoint);
-            let products = response.data?.products || response.data || [];
-
-            // Fallback: jika tidak ada produk aktif, tampilkan semua produk
-            if (!products || products.length === 0) {
-                let fallbackEndpoint = '?controller=product&action=list&limit=50';
-                if (categoryId) {
-                    fallbackEndpoint += `&category_id=${categoryId}`;
-                }
-                try {
-                    const fallbackRes = await Utils.apiCall(fallbackEndpoint);
-                    products = fallbackRes.data?.products || fallbackRes.data || [];
-                } catch (fallbackError) {
-                    // Abaikan, akan ditangani pada blok catch utama
-                    console.warn('Fallback loadProducts error:', fallbackError);
-                }
-            }
-
-            ShopCatalog.products = products;
-            ShopCatalog.renderProducts();
-        } catch (error) {
-            console.error('Failed to load products:', error);
-            const grid = document.getElementById('productsGrid');
-            if (grid) {
-                grid.innerHTML = '<div class="loading"><p>Gagal memuat produk</p></div>';
-            }
-        } finally {
-            // Sembunyikan skeleton setelah loading
-            if (window.SkeletonLoader && typeof SkeletonLoader.hide === 'function') {
-                SkeletonLoader.hide('skeletonGrid');
-            }
-        }
-    },
-
-    renderCategories: () => {
-        const container = document.getElementById('categoryShowcase');
-        if (!container) return;
-
-        if (ShopCatalog.categories.length === 0) {
-            container.innerHTML = '';
-            return;
-        }
-
-        container.innerHTML = ShopCatalog.categories.map(category => `
-            <div class="category-card" data-category="${category.id}">
-                <div class="category-icon" style="background: ${category.color || 'var(--primary-color)'}20; color: ${category.color || 'var(--primary-color)'};">
-                    <i class="${category.icon || 'fas fa-tag'}"></i>
-                </div>
-                <div class="category-info">
-                    <h4 class="category-name">${category.name}</h4>
-                    ${category.product_count ? `<span class="category-count">${category.product_count} produk</span>` : ''}
-                </div>
-            </div>
-        `).join('');
-    },
-
-    renderProducts: () => {
-        const grid = document.getElementById('productsGrid');
-        if (!grid) return;
-
-        if (ShopCatalog.products.length === 0) {
-            grid.innerHTML = '<div class="empty-state"><i class="fas fa-box-open"></i><p>Produk tidak ditemukan</p></div>';
-            return;
-        }
-
-        // Update product count
-        const productCount = document.getElementById('productCount');
-        if (productCount) {
-            productCount.textContent = `${ShopCatalog.products.length} produk`;
-        }
-
-        grid.innerHTML = ShopCatalog.products.map(product => {
-            const isOutOfStock = product.stock_quantity === 0;
-            const isLowStock = product.stock_quantity > 0 && product.stock_quantity < 10;
-            const stockBadge = isOutOfStock 
-                ? '<span class="stock-badge out-of-stock"><i class="fas fa-times-circle"></i> Habis</span>'
-                : isLowStock 
-                ? `<span class="stock-badge low-stock"><i class="fas fa-exclamation-triangle"></i> Stok Terbatas (${product.stock_quantity})</span>`
-                : `<span class="stock-badge in-stock"><i class="fas fa-check-circle"></i> Tersedia</span>`;
-
-            return `
-            <div class="product-card ${isOutOfStock ? 'out-of-stock-card' : ''}" data-product-id="${product.id}">
-                <div class="product-image-wrapper">
-                    <img src="${Utils.resolveImageUrl(product.image, '../assets/img/no-image.svg')}" 
-                         alt="${product.name}" 
-                         class="product-image"
-                         loading="lazy" decoding="async"
-                         onerror="this.src='../assets/img/no-image.svg'">
-                    ${stockBadge}
-                    <div class="product-overlay">
-                        <button class="btn-quick-view" onclick="event.stopPropagation(); ShopProduct.showProductModal(${product.id})" title="Quick View">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                    </div>
-                </div>
-                
-                <div class="product-info">
-                    <div class="product-category">${product.category_name || 'Uncategorized'}</div>
-                    <h3 class="product-name" onclick="ShopProduct.showProductModal(${product.id})">${product.name}</h3>
-                    <div class="product-price">${Utils.formatCurrency(product.price)}</div>
-                    ${product.description ? `<p class="product-description-short">${product.description.substring(0, 60)}${product.description.length > 60 ? '...' : ''}</p>` : ''}
-                    
-                    <div class="product-actions">
-                        <div class="quantity-selector-mini" style="display: ${isOutOfStock ? 'none' : 'flex'};">
-                            <button class="qty-btn qty-minus" onclick="event.stopPropagation(); ShopCatalog.updateQuantity(${product.id}, -1)">
-                                <i class="fas fa-minus"></i>
-                            </button>
-                            <span class="qty-display" data-qty-id="${product.id}">1</span>
-                            <button class="qty-btn qty-plus" onclick="event.stopPropagation(); ShopCatalog.updateQuantity(${product.id}, 1)">
-                                <i class="fas fa-plus"></i>
-                            </button>
-                        </div>
-                        <button type="button" class="btn-add-to-cart ${isOutOfStock ? 'disabled' : ''}" 
-                                data-product-id="${product.id}"
-                                ${isOutOfStock ? 'disabled title="Produk habis"' : 'title="Tambah ke keranjang"'}
-                                onclick="event.preventDefault(); event.stopPropagation(); ShopCatalog.addToCartDirect(${product.id}, (function(){var el=document.querySelector('[data-qty-id=${product.id}]'); return el? (parseInt(el.textContent)||1) : 1;})());">
-                            <i class="fas fa-shopping-cart"></i>
-                            <span>${isOutOfStock ? 'Habis' : 'Tambah ke Keranjang'}</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-        }).join('');
-    },
-
-    addToCartDirect: (productId, quantity = 1) => {
-        const product = ShopCatalog.products.find(p => p.id === productId);
-        if (!product) return;
-        
-        if (product.stock_quantity === 0) {
-            Utils.showAdvancedToast('Produk sedang habis', 'warning');
-            return;
-        }
-        
-        // Get button element for animation (target the actual button)
-        const button = document.querySelector(`button.btn-add-to-cart[data-product-id="${productId}"]`);
-        if (button) {
-            const originalContent = button.innerHTML;
-            button.disabled = true;
-            ShopCart.addToCart(product, quantity);
-            Utils.animateCartIcon(button);
-            if (typeof window.showAddBadge === 'function') { window.showAddBadge(button, 'Ditambahkan'); }
-            setTimeout(() => { button.disabled = false; button.innerHTML = originalContent; }, 900);
-        } else {
-            ShopCart.addToCart(product, quantity);
-        }
-    },
-
-    sortProducts: (sortBy) => {
-        const [field, order] = sortBy.split('_');
-        
-        ShopCatalog.products.sort((a, b) => {
-            let aVal, bVal;
-            
-            switch(field) {
-                case 'name':
-                    aVal = a.name.toLowerCase();
-                    bVal = b.name.toLowerCase();
-                    break;
-                case 'price':
-                    aVal = parseFloat(a.price);
-                    bVal = parseFloat(b.price);
-                    break;
-                case 'stock':
-                    aVal = parseInt(a.stock_quantity);
-                    bVal = parseInt(b.stock_quantity);
-                    break;
-                default:
-                    return 0;
-            }
-            
-            if (aVal < bVal) return order === 'asc' ? -1 : 1;
-            if (aVal > bVal) return order === 'asc' ? 1 : -1;
-            return 0;
-        });
-        
-        ShopCatalog.renderProducts();
-    },
-
-    searchProducts: (query) => {
-        if (!query) {
-            ShopCatalog.renderProducts();
-            return;
-        }
-
-        const filtered = ShopCatalog.products.filter(product =>
-            product.name.toLowerCase().includes(query.toLowerCase()) ||
-            (product.sku && product.sku.toLowerCase().includes(query.toLowerCase())) ||
-            (product.category_name && product.category_name.toLowerCase().includes(query.toLowerCase()))
-        );
-
-        // Temporarily store filtered results
-        const originalProducts = [...ShopCatalog.products];
-        ShopCatalog.products = filtered;
-        ShopCatalog.renderProducts();
-        ShopCatalog.products = originalProducts; // Restore original
-    },
-
-    updateQuantity: (productId, change) => {
-        const qtyDisplay = document.querySelector(`[data-qty-id="${productId}"]`);
-        
-        if (qtyDisplay) {
-            let currentQty = parseInt(qtyDisplay.textContent) || 1;
-            const product = ShopCatalog.products.find(p => p.id === productId);
-            
-            if (product) {
-                currentQty = Math.max(1, Math.min(product.stock_quantity, currentQty + change));
-                qtyDisplay.textContent = currentQty;
-                
-                // Add pulse animation
-                qtyDisplay.classList.add('pulse');
-                setTimeout(() => qtyDisplay.classList.remove('pulse'), 300);
-                
-                // Visual feedback
-                const qtyBtns = document.querySelectorAll(`[data-product-id="${productId}"] .qty-btn`);
-                qtyBtns.forEach(btn => {
-                    btn.style.transform = 'scale(0.9)';
-                    setTimeout(() => btn.style.transform = '', 150);
-                });
-            }
-        }
-    },
-
-    filterByCategory: (categoryId) => {
-        ShopCatalog.currentCategory = categoryId;
-        
-        // Update active button
-        document.querySelectorAll('.category-btn').forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.dataset.category === categoryId.toString()) {
-                btn.classList.add('active');
-            }
-        });
-
-        if (categoryId === 'all') {
-            ShopCatalog.loadProducts();
-        } else {
-            ShopCatalog.loadProducts(categoryId);
-        }
-    },
-
-    quickFilter: (filterType) => {
-        // Update active button
-        document.querySelectorAll('.quick-filter-btn').forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.dataset.filter === filterType) {
-                btn.classList.add('active');
-            }
-        });
-
-        if (filterType === 'all') {
-            ShopCatalog.loadProducts();
-            return;
-        }
-
-        // Quick filters: bestseller, new, promo
-        let filtered = [...ShopCatalog.products];
-        
-        switch(filterType) {
-            case 'bestseller':
-                // Sort by stock sold or stock quantity (low stock = popular)
-                filtered.sort((a, b) => {
-                    const aSold = (b.stock_quantity || 0) - (a.original_stock || 100);
-                    const bSold = (a.stock_quantity || 0) - (b.original_stock || 100);
-                    return bSold - aSold;
-                });
-                break;
-            case 'new':
-                // Sort by created date (newest first) or ID
-                filtered.sort((a, b) => (b.id || 0) - (a.id || 0));
-                break;
-            case 'promo':
-                // Show products with low stock as "promo" or special
-                filtered = filtered.filter(p => p.stock_quantity < 15 || p.price < 30000);
-                break;
-        }
-        
-        // Temporarily replace products for display
-        const originalProducts = [...ShopCatalog.products];
-        ShopCatalog.products = filtered.slice(0, 50);
-        ShopCatalog.renderProducts();
-        ShopCatalog.products = originalProducts;
-    },
-
-    setupEventListeners: () => {
-        // Search
-        const searchInput = document.getElementById('searchInput');
-        if (searchInput) {
-            let debounceTimer;
-            searchInput.addEventListener('input', (e) => {
-                clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(() => {
-                    ShopCatalog.searchProducts(e.target.value);
-                }, 300);
-            });
-        }
-
-        // Sort
-        const sortSelect = document.getElementById('sortSelect');
-        if (sortSelect) {
-            sortSelect.addEventListener('change', (e) => {
-                ShopCatalog.sortProducts(e.target.value);
-            });
-        }
-
-        // Category toggle
-        const categoryToggle = document.getElementById('categoryToggle');
-        const categorySection = document.getElementById('categorySection');
-        if (categoryToggle && categorySection) {
-            categoryToggle.addEventListener('click', () => {
-                const isVisible = categorySection.style.display !== 'none';
-                categorySection.style.display = isVisible ? 'none' : 'block';
-                categoryToggle.classList.toggle('active', !isVisible);
-            });
-        }
-
-        // Category filter
-        const categoryContainer = document.getElementById('categoryShowcase');
-        if (categoryContainer) {
-            categoryContainer.addEventListener('click', (e) => {
-                const btn = e.target.closest('.category-card');
-                if (btn) {
-                    ShopCatalog.filterByCategory(btn.dataset.category || 'all');
-                    categorySection.style.display = 'none';
-                    categoryToggle.classList.remove('active');
-                }
-            });
-        }
-
-        // Delegated add-to-cart click from products grid
-        const productsGrid = document.getElementById('productsGrid');
-        if (productsGrid) {
-            productsGrid.addEventListener('click', (e) => {
-                const addBtn = e.target.closest('button.btn-add-to-cart');
-                if (addBtn && !addBtn.classList.contains('disabled')) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const productId = parseInt(addBtn.getAttribute('data-product-id'), 10);
-                    const parentCard = addBtn.closest('.product-card');
-                    // Prefer numeric input in classic layout
-                    let qtyInput = parentCard ? parentCard.querySelector('input[name="qty"]') : null;
-                    let qty = qtyInput ? parseInt(qtyInput.value, 10) : NaN;
-                    if (!qty || isNaN(qty)) {
-                        // Fallback to qty display in modern layout
-                        const qtyEl = parentCard ? parentCard.querySelector(`[data-qty-id="${productId}"]`) : document.querySelector(`[data-qty-id="${productId}"]`);
-                        const qtyText = (qtyEl && qtyEl.textContent) ? qtyEl.textContent : '1';
-                        qty = parseInt(qtyText, 10) || 1;
-                    }
-                    // Clamp quantity to valid range
-                    qty = Math.max(1, qty);
-                    const product = ShopCatalog.products.find(p => p.id === productId);
-                    if (product && typeof product.stock_quantity === 'number') {
-                        qty = Math.min(qty, product.stock_quantity);
-                    }
-                    ShopCatalog.addToCartDirect(productId, qty);
-                }
-            });
-        }
-
-        // Global fallback: ensure clicks work even if grid listener fails
-        if (!window.__BB_ADD_TO_CART_LISTENER_ADDED__) {
-            window.__BB_ADD_TO_CART_LISTENER_ADDED__ = true;
-            document.addEventListener('click', (e) => {
-                const addBtn = e.target.closest('button.btn-add-to-cart');
-                if (!addBtn || addBtn.classList.contains('disabled')) return;
-                e.preventDefault();
-                e.stopPropagation();
-                const productId = parseInt(addBtn.getAttribute('data-product-id'), 10);
-                const parentCard = addBtn.closest('.product-card');
-                let qtyInput = parentCard ? parentCard.querySelector('input[name="qty"]') : null;
-                let qty = qtyInput ? parseInt(qtyInput.value, 10) : NaN;
-                if (!qty || isNaN(qty)) {
-                    const qtyEl = parentCard ? parentCard.querySelector(`[data-qty-id="${productId}"]`) : document.querySelector(`[data-qty-id="${productId}"]`);
-                    const qtyText = (qtyEl && qtyEl.textContent) ? qtyEl.textContent : '1';
-                    qty = parseInt(qtyText, 10) || 1;
-                }
-                qty = Math.max(1, qty);
-                const product = ShopCatalog.products.find(p => p.id === productId);
-                if (product && typeof product.stock_quantity === 'number') {
-                    qty = Math.min(qty, product.stock_quantity);
-                }
-                ShopCatalog.addToCartDirect(productId, qty);
-            }, true);
-        }
+    
+    // Update expiry info - REMOVED as requested
+    if(meta){
+      this.deadline = p?.expired_at ? new Date(p.expired_at) : null
+      meta.innerHTML = '' // Clear the expiry info
     }
-};
-
-// Product Detail Modal
-const ShopProduct = {
-    currentProduct: null,
-
-    showProductModal: async (productId) => {
-        try {
-            const response = await Utils.apiCall(`?controller=product&action=get&id=${productId}`);
-            ShopProduct.currentProduct = response.data;
-            ShopProduct.renderProductModal();
-        } catch (error) {
-            Utils.showToast('Failed to load product details', 'error');
-        }
-    },
-
-    renderProductModal: () => {
-        const product = ShopProduct.currentProduct;
-        if (!product) return;
-
-        // Update modal content
-        document.getElementById('modalProductName').textContent = product.name;
-        document.getElementById('modalProductNameLarge').textContent = product.name;
-        document.getElementById('modalProductCategory').textContent = product.category_name || 'Uncategorized';
-        document.getElementById('modalProductPrice').textContent = Utils.formatCurrency(product.price);
-        document.getElementById('modalProductStock').textContent = `Stock: ${product.stock_quantity}`;
-        document.getElementById('modalProductDescription').textContent = product.description || 'No description available';
-        
-        const productImage = Utils.resolveImageUrl(product.image, '../assets/img/product-placeholder.jpg');
-        document.getElementById('modalProductImage').src = productImage;
-        
-        // Reset quantity
-        document.getElementById('modalQuantity').value = 1;
-
-        // Show modal
-        document.getElementById('productModal').classList.add('show');
-    },
-
-    closeProductModal: () => {
-        document.getElementById('productModal').classList.remove('show');
-    },
-
-    setupModalListeners: () => {
-        // Close modal buttons
-        document.getElementById('closeProductModal')?.addEventListener('click', ShopProduct.closeProductModal);
-        
-        // Quantity controls
-        document.getElementById('decreaseQuantity')?.addEventListener('click', () => {
-            const input = document.getElementById('modalQuantity');
-            if (input.value > 1) {
-                input.value = parseInt(input.value) - 1;
-            }
-        });
-
-        document.getElementById('increaseQuantity')?.addEventListener('click', () => {
-            const input = document.getElementById('modalQuantity');
-            const maxStock = ShopProduct.currentProduct?.stock_quantity || 999;
-            if (parseInt(input.value) < maxStock) {
-                input.value = parseInt(input.value) + 1;
-            }
-        });
-
-        // Add to cart
-        document.getElementById('addToCartBtn')?.addEventListener('click', () => {
-            if (!ShopProduct.currentProduct) return;
-
-            const quantity = parseInt(document.getElementById('modalQuantity').value);
-            ShopCart.addToCart(ShopProduct.currentProduct, quantity);
-            ShopProduct.closeProductModal();
-        });
-
-        // Close modal when clicking outside
-        document.getElementById('productModal')?.addEventListener('click', (e) => {
-            if (e.target.id === 'productModal') {
-                ShopProduct.closeProductModal();
-            }
-        });
+    
+    // Update summary with improved layout
+    if(sum){
+      const items = order?.items||[]
+      sum.innerHTML = `
+        <div class="summary-card">
+          <div class="summary-card-header">
+            <i class="fas fa-receipt"></i>
+            <h3 class="summary-card-title">Ringkasan Order</h3>
+          </div>
+          <div class="summary-card-body">
+            ${items.map((i,idx)=>`
+              <div class="summary-row">
+                <span>${idx+1}. ${(i.name||i.product_name||'Item')} × ${i.quantity||i.qty||1}</span>
+                <span>${Utils.formatCurrency(i.total_price||((i.unit_price||i.price||0)*(i.quantity||i.qty||1)))}</span>
+              </div>
+            `).join('')}
+            <div class="summary-row summary-total">
+              <span>Total Pembayaran</span>
+              <span>${Utils.formatCurrency(total)}</span>
+            </div>
+          </div>
+        </div>
+      `
     }
-};
-
-// Checkout Handler
-const ShopCheckout = {
-    // Menyimpan data order terakhir untuk keperluan cetak invoice / share
-    currentOrderData: null,
-    expiryTimer: null,
-    statusPollTimer: null,
-    initialize: () => {
-        // Prefill HANYA jika pengguna mengaktifkan autofill sebelumnya
+    
+    if(totalEl) totalEl.textContent = Utils.formatCurrency(total)
+    if(link){ link.href = `order-status.php?code=${encodeURIComponent(num||'')}` }
+    if (num) {
+      try { localStorage.setItem('bb_last_order', String(num)) } catch (e) {}
+    }
+    if(verifyBtn){
+      verifyBtn.disabled = false
+      verifyBtn.textContent = 'Verifikasi Pembayaran'
+      verifyBtn.onclick = async () => {
         try {
-            const auto = localStorage.getItem('checkout_autofill');
-            if (auto === '1' || auto === 'true') {
-                ShopCheckout.prefillSavedCustomer();
-            } else {
-                ['customer_name','customer_email','customer_phone','customer_address']
-                    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-            }
-        } catch (e) { /* ignore */ }
-        ShopCheckout.loadCheckoutItems();
-        ShopCheckout.setupCheckoutListeners();
-        ShopCart.updateCartCount();
-    },
-
-    prefillSavedCustomer: () => {
-        const setVal = (id, value) => {
-            const el = document.getElementById(id);
-            if (el && value) el.value = value;
-        };
-        try {
-            const name = localStorage.getItem('checkout_name');
-            const email = localStorage.getItem('checkout_email');
-            const phone = localStorage.getItem('checkout_phone');
-            const address = localStorage.getItem('checkout_address');
-            setVal('customer_name', name);
-            setVal('customer_email', email);
-            setVal('customer_phone', phone);
-            setVal('customer_address', address);
+          verifyBtn.disabled = true
+          verifyBtn.textContent = 'Mengirim...'
+          const resp = await Utils.apiCall(`?controller=order&action=request-verification`, {
+            method: 'POST',
+            body: JSON.stringify({ order_number: num })
+          })
+          if (resp && resp.success) {
+            if (window.app && app.showToast) app.showToast('Permintaan verifikasi dikirim', 'success')
+            verifyBtn.textContent = 'Terkirim'
+          } else {
+            verifyBtn.disabled = false
+            verifyBtn.textContent = 'Verifikasi Pembayaran'
+            if (window.app && app.showToast) app.showToast('Gagal mengirim verifikasi', 'error')
+          }
         } catch (e) {
-            console.warn('Prefill error', e);
+          verifyBtn.disabled = false
+          verifyBtn.textContent = 'Verifikasi Pembayaran'
+          if (window.app && app.showToast) app.showToast('Gagal mengirim verifikasi', 'error')
         }
-    },
-
-    loadCheckoutItems: () => {
-        const cart = ShopCart.getCart();
-        const container = document.getElementById('checkoutItems');
-        
-        if (!container) return;
-
-        if (cart.length === 0) {
-            window.location.href = 'cart.php';
-            return;
-        }
-
-        container.innerHTML = cart.map(item => `
-            <div class="order-item" style="display: flex; gap: .75rem; padding: .5rem 0; border: none; border-bottom: 1px solid var(--border-color); border-radius: 0;">
-                <div style="flex: 1;">
-                    <div style="font-weight: 600;">${item.name}</div>
-                    <div style="color: var(--text-light); font-size: 0.875rem;">
-                        ${Utils.formatCurrency(item.price)} x ${item.quantity}
-                    </div>
-                </div>
-                <div style="font-weight: 600; color: var(--text-dark);">
-                    ${Utils.formatCurrency(item.price * item.quantity)}
-                </div>
-            </div>
-        `).join('');
-
-        ShopCart.updateSummary();
-    },
-
-    setupCheckoutListeners: () => {
-        const checkoutForm = document.getElementById('checkoutForm');
-        if (checkoutForm) {
-            checkoutForm.addEventListener('submit', ShopCheckout.processCheckout);
-        }
-
-        // Fallback: jika event submit tidak terpicu karena validasi HTML, tampilkan feedback
-        const submitBtn = document.getElementById('placeOrderBtn');
-        if (submitBtn) {
-            submitBtn.addEventListener('click', (ev) => {
-                ev.preventDefault();
-                const form = document.getElementById('checkoutForm');
-                if (!form) return;
-                if (!form.checkValidity()) { form.reportValidity(); return; }
-                ShopCheckout.processCheckout({ preventDefault: () => {}, target: form });
-            });
-        }
-    },
-
-    // Control visibility of CTAs based on payment status
-    setCTAs: (isPaid) => {
-        // QRIS CTAs
-        const shareQr = document.getElementById('shareWhatsAppBtnQr');
-        const trackQr = document.getElementById('trackOrderLinkQr');
-        if (trackQr) trackQr.style.display = 'inline-block'; // always visible
-        if (shareQr) {
-            shareQr.style.display = isPaid ? 'inline-block' : 'none';
-            if (isPaid) {
-                shareQr.classList.add('cta-bounce');
-                setTimeout(() => shareQr.classList.remove('cta-bounce'), 600);
-            }
-        }
-
-        // Transfer CTAs
-        const shareTf = document.getElementById('shareWhatsAppBtnTransfer');
-        const trackTf = document.getElementById('trackOrderLinkTf');
-        if (trackTf) trackTf.style.display = 'inline-block'; // always visible
-        if (shareTf) {
-            shareTf.style.display = isPaid ? 'inline-block' : 'none';
-            if (isPaid) {
-                shareTf.classList.add('cta-bounce');
-                setTimeout(() => shareTf.classList.remove('cta-bounce'), 600);
-            }
-        }
-    },
-
-    processCheckout: async (e) => {
-        e.preventDefault();
-
-        // Pastikan field wajib terisi dan tampilkan feedback native
-        const form = e.target;
-        if (form && !form.checkValidity()) {
-            form.reportValidity();
-            return;
-        }
-
-        const cart = ShopCart.getCart();
-        if (cart.length === 0) {
-            Utils.showToast('Cart is empty', 'error');
-            return;
-        }
-
-        // Get form data
-        const formData = new FormData(e.target);
-        const orderData = {
-            customer_name: formData.get('customer_name'),
-            customer_email: formData.get('customer_email'),
-            customer_phone: formData.get('customer_phone'),
-            customer_address: formData.get('customer_address'),
-            payment_method: formData.get('payment_method'),
-            notes: formData.get('notes'),
-            items: cart.map(item => ({
-                product_id: item.id,
-                quantity: item.quantity
+      }
+    }
+    const changeBtn = document.getElementById('changePaymentMethodBtn')
+    if (changeBtn) {
+      const payStatus = String(order?.payment_status || p?.status || '').toLowerCase()
+      const ordStatus = String(order?.order_status || '').toLowerCase()
+      const isPending = (!payStatus || payStatus === 'pending') && (ordStatus !== 'completed' && ordStatus !== 'cancelled')
+      changeBtn.style.display = isPending ? 'block' : 'none'
+      changeBtn.disabled = false
+      changeBtn.onclick = async () => {
+        try {
+          changeBtn.disabled = true
+          changeBtn.textContent = 'Mengubah...'
+          const resp = await Utils.apiCall(`?controller=order&action=cancel`, {
+            method: 'POST',
+            body: JSON.stringify({ order_number: num })
+          })
+          if (resp && resp.success) {
+            const items = (order?.items || []).map(i => ({
+              id: i.product_id || i.id,
+              name: i.name || i.product_name || 'Item',
+              price: Number(i.unit_price || i.price || 0),
+              image: i.image || '',
+              qty: Number(i.quantity || i.qty || 1)
             }))
-        };
-
-        // Disable button
-        const submitBtn = document.getElementById('placeOrderBtn');
-        const originalText = submitBtn ? submitBtn.innerHTML : '';
-        if (submitBtn) {
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
-        }
-
-        try {
-            const response = await Utils.apiCall('?controller=order&action=create', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(orderData)
-            });
-
-            if (response.success) {
-                ShopCheckout.showPaymentSection(response.data);
-                ShopCart.clearCart();
-
-                // Simpan info pelanggan hanya jika autofill diaktifkan
-                try {
-                    const auto = localStorage.getItem('checkout_autofill');
-                    if (auto === '1' || auto === 'true') {
-                        localStorage.setItem('checkout_name', orderData.customer_name || '');
-                        localStorage.setItem('checkout_email', orderData.customer_email || '');
-                        localStorage.setItem('checkout_phone', orderData.customer_phone || '');
-                        localStorage.setItem('checkout_address', orderData.customer_address || '');
-                    } else {
-                        localStorage.removeItem('checkout_name');
-                        localStorage.removeItem('checkout_email');
-                        localStorage.removeItem('checkout_phone');
-                        localStorage.removeItem('checkout_address');
-                    }
-                } catch (e) {}
-            } else {
-                Utils.showToast(response.error || 'Order failed', 'error');
-            }
-        } catch (error) {
-            Utils.showToast('Failed to place order: ' + error.message, 'error');
-        } finally {
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalText;
-            }
-        }
-    },
-
-    showPaymentSection: (orderData) => {
-        // simpan orderData agar bisa dipakai kembali (print invoice, share WhatsApp)
-        ShopCheckout.currentOrderData = orderData;
-
-        // Hide checkout form
-        document.getElementById('checkoutFormSection').style.display = 'none';
-        
-        // Show payment section
-        const paymentSection = document.getElementById('paymentSection');
-        paymentSection.style.display = 'block';
-
-        const page = document.querySelector('.checkout-page');
-        if (page) {
-            page.classList.add('order-created', 'order-created-horizontal');
-            try { page.appendChild(paymentSection); } catch (e) {}
-        }
-
-        // Set order number
-        document.getElementById('orderNumber').textContent = orderData.order_number;
-
-        // Show appropriate payment method
-        if (orderData.payment_method === 'qris') {
-            ShopCheckout.showQRISPayment(orderData);
-        } else if (orderData.payment_method === 'transfer') {
-            ShopCheckout.showTransferPayment(orderData);
-        }
-
-        // Update track order link untuk masing-masing metode
-        const trackQr = document.getElementById('trackOrderLinkQr');
-        if (trackQr) trackQr.href = `order-status.php?code=${orderData.order_number}`;
-        const trackTf = document.getElementById('trackOrderLinkTf');
-        if (trackTf) trackTf.href = `order-status.php?code=${orderData.order_number}`;
-
-        // Bind cancel buttons
-        const cancelQr = document.getElementById('cancelOrderBtnQr');
-        if (cancelQr) cancelQr.onclick = async () => {
-            const confirmCancel = window.confirm('Batalkan pesanan ini?');
-            if (!confirmCancel) return;
-            cancelQr.disabled = true;
-            const original = cancelQr.innerHTML;
-            cancelQr.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
-            try {
-                await ShopCheckout.cancelOrder(orderData.order_number, 'buyer_cancel');
-            } finally {
-                cancelQr.innerHTML = original;
-                cancelQr.disabled = false;
-            }
-        };
-        const cancelTf = document.getElementById('cancelOrderBtnTransfer');
-        if (cancelTf) cancelTf.onclick = async () => {
-            const confirmCancel = window.confirm('Batalkan pesanan ini?');
-            if (!confirmCancel) return;
-            cancelTf.disabled = true;
-            const original = cancelTf.innerHTML;
-            cancelTf.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
-            try {
-                await ShopCheckout.cancelOrder(orderData.order_number, 'buyer_cancel');
-            } finally {
-                cancelTf.innerHTML = original;
-                cancelTf.disabled = false;
-            }
-        };
-    },
-
-    showQRISPayment: (orderData) => {
-        const qrisSection = document.getElementById('qrisPayment');
-        qrisSection.style.display = 'block';
-
-        // Set QR code image statically to QRIS GoPay asset
-        // Requirement: QR on checkout must be fixed and not change
-        document.getElementById('qrCodeImage').src = '/assets/img/qris-gopay.svg';
-
-        // Set amount
-        document.getElementById('paymentAmount').textContent = Utils.formatCurrency(orderData.total_amount);
-
-        // Start expiry countdown if available
-        const expiredAt = orderData.payment?.expired_at || orderData.payment_info?.expired_at;
-        if (expiredAt) {
-            ShopCheckout.startExpiryCountdown(expiredAt, 'qrExpiry');
-        } else {
-            const expiryEl = document.getElementById('qrExpiry');
-            if (expiryEl) expiryEl.textContent = '-';
-        }
-
-        // Bind verification request button (buyer indicates they already paid)
-        const manualBtnQr = document.getElementById('manualPaidBtnQr');
-        if (manualBtnQr) {
-            manualBtnQr.onclick = async () => {
-                manualBtnQr.disabled = true;
-                const original = manualBtnQr.innerHTML;
-                manualBtnQr.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
-                try {
-                    await ShopCheckout.requestVerification(orderData.order_number, 'qr_scanned');
-                    const statusEl = document.getElementById('paymentStatus');
-                    if (statusEl) {
-                        statusEl.innerHTML = `
-                            <i class="fas fa-shield-alt" style="color: var(--primary-color);"></i>
-                            <p style="color: var(--primary-color);">Sedang diverifikasi oleh kasir/manager...</p>
-                        `;
-                    }
-                    manualBtnQr.innerHTML = '<i class="fas fa-hourglass-half"></i> Sedang diverifikasi';
-                } catch (e) {
-                    manualBtnQr.innerHTML = original;
-                    manualBtnQr.disabled = false;
-                    Utils.showToast('Gagal mengirim verifikasi', 'error');
-                    return;
-                }
-            };
-        }
-
-        // Bind tombol copy order number & share WhatsApp (QRIS)
-        const copyQr = document.getElementById('copyOrderBtnQr');
-        if (copyQr) {
-            copyQr.onclick = async () => {
-                try {
-                    await navigator.clipboard.writeText(orderData.order_number);
-                    Utils.showAdvancedToast('Order number disalin', 'success', 'copy');
-                } catch (e) {
-                    Utils.showToast('Gagal menyalin order number', 'error');
-                }
-            };
-        }
-        const shareQr = document.getElementById('shareWhatsAppBtnQr');
-        if (shareQr) {
-            shareQr.onclick = () => {
-                const itemsList = (orderData.items || []).map(it => `${it.product_name || it.name} x ${it.quantity}`).join('\n');
-                const msg = `Pesanan Baru ByteBalok\nNo: ${orderData.order_number}\nTotal: ${Utils.formatCurrency(orderData.total_amount)}\n${itemsList ? 'Items:\n' + itemsList + '\n' : ''}Cek status: ${window.location.origin}/shop/order-status.php?code=${orderData.order_number}`;
-                const url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
-                window.open(url, '_blank');
-            };
-        }
-
-        // Initial CTA gating for QRIS (share hidden until paid)
-        ShopCheckout.setCTAs(false);
-
-        // Start checking payment status
-        ShopCheckout.checkPaymentStatus(orderData.order_number);
-    },
-
-    showTransferPayment: (orderData) => {
-        const transferSection = document.getElementById('transferPayment');
-        transferSection.style.display = 'block';
-        document.getElementById('transferAmount').textContent = Utils.formatCurrency(orderData.total_amount);
-
-        const paymentInfo = orderData.payment || orderData.payment_info || {};
-
-        const setText = (id, value) => {
-            const el = document.getElementById(id);
-            if (el && value !== undefined && value !== null) {
-                el.textContent = value || '-';
-            }
-        };
-
-        setText('bankName', paymentInfo.bank_name);
-        setText('accountNumber', paymentInfo.account_number);
-        setText('accountName', paymentInfo.account_name);
-        setText('virtualAccount', paymentInfo.virtual_account);
-        setText('referenceNumber', paymentInfo.reference_number);
-        setText('transferInstructions', paymentInfo.instructions);
-
-        // Optional: countdown untuk TRANSFER jika gateway menyediakan expired_at
-        const transferExpiredAt = paymentInfo.expired_at;
-        const transferExpiryEl = document.getElementById('transferExpiry');
-        if (transferExpiredAt && transferExpiryEl) {
-            ShopCheckout.startExpiryCountdown(transferExpiredAt, 'transferExpiry');
-        } else if (transferExpiryEl) {
-            transferExpiryEl.textContent = '-';
-        }
-
-        // Bind verification request button for transfer
-        const manualBtnTf = document.getElementById('manualPaidBtnTransfer');
-        if (manualBtnTf) {
-            manualBtnTf.onclick = async () => {
-                manualBtnTf.disabled = true;
-                const original = manualBtnTf.innerHTML;
-                manualBtnTf.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
-                try {
-                    await ShopCheckout.requestVerification(orderData.order_number, 'transfer_received');
-                    const statusElT = document.getElementById('paymentStatusTransfer');
-                    if (statusElT) {
-                        statusElT.innerHTML = `
-                            <i class="fas fa-shield-alt" style="color: var(--primary-color);"></i>
-                            <p style="color: var(--primary-color);">Sedang diverifikasi oleh kasir/manager...</p>
-                        `;
-                    }
-                    manualBtnTf.innerHTML = '<i class="fas fa-hourglass-half"></i> Sedang diverifikasi';
-                } catch (e) {
-                    manualBtnTf.innerHTML = original;
-                    manualBtnTf.disabled = false;
-                    Utils.showToast('Gagal mengirim verifikasi', 'error');
-                    return;
-                }
-            };
-        }
-
-        // Bind tombol copy order number & share WhatsApp (Transfer)
-        const copyTf = document.getElementById('copyOrderBtnTransfer');
-        if (copyTf) {
-            copyTf.onclick = async () => {
-                try {
-                    await navigator.clipboard.writeText(orderData.order_number);
-                    Utils.showAdvancedToast('Order number disalin', 'success', 'copy');
-                } catch (e) {
-                    Utils.showToast('Gagal menyalin order number', 'error');
-                }
-            };
-        }
-        const shareTf = document.getElementById('shareWhatsAppBtnTransfer');
-        if (shareTf) {
-            shareTf.onclick = () => {
-                const itemsList = (orderData.items || []).map(it => `${it.product_name || it.name} x ${it.quantity}`).join('\n');
-                const msg = `Pesanan Baru ByteBalok\nNo: ${orderData.order_number}\nTotal: ${Utils.formatCurrency(orderData.total_amount)}\n${itemsList ? 'Items:\n' + itemsList + '\n' : ''}Cek status: ${window.location.origin}/shop/order-status.php?code=${orderData.order_number}`;
-                const url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
-                window.open(url, '_blank');
-            };
-        }
-
-        // Mulai cek status pembayaran
-        ShopCheckout.checkPaymentStatus(orderData.order_number);
-
-        // Initial CTA gating for Transfer (share hidden until paid)
-        ShopCheckout.setCTAs(false);
-    },
-
-
-    simulatePayment: async (orderNumber) => {
-        try {
-            const response = await Utils.apiCall('?controller=payment&action=simulate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ order_number: orderNumber })
-            });
-
-            if (response.success) {
-                Utils.showToast('Payment successful!', 'success');
-                document.getElementById('paymentStatus').innerHTML = `
-                    <i class="fas fa-check-circle" style="color: var(--secondary-color);"></i>
-                    <p style="color: var(--secondary-color);">Payment Confirmed!</p>
-                `;
-            }
-        } catch (error) {
-            Utils.showToast('Payment simulation failed', 'error');
-        }
-    },
-
-    checkPaymentStatus: (orderNumber) => {
-        const checkStatus = async () => {
-            try {
-                const response = await Utils.apiCall(`?controller=payment&action=check-status&order_number=${orderNumber}`);
-                const data = response.data || {};
-
-                // Optional intermediate signals for cashier awareness
-                // Show when QR is scanned (if gateway provides flag)
-                if ((ShopCheckout.currentOrderData?.payment_method === 'qris') && (data.qr_scanned === true)) {
-                    const statusEl = document.getElementById('paymentStatus');
-                    if (statusEl) {
-                        statusEl.innerHTML = `
-                            <i class="fas fa-mobile-alt" style="color: var(--primary-color);"></i>
-                            <p style="color: var(--primary-color);">QR telah di-scan, menunggu konfirmasi pembayaran...</p>
-                        `;
-                    }
-                }
-
-                // Show when transfer has been received by bank but not yet confirmed
-                if ((ShopCheckout.currentOrderData?.payment_method === 'transfer') && (data.transfer_received === true || data.transfer_status === 'received')) {
-                    const statusElT = document.getElementById('paymentStatusTransfer');
-                    if (statusElT) {
-                        statusElT.innerHTML = `
-                            <i class="fas fa-university" style="color: var(--primary-color);"></i>
-                            <p style="color: var(--primary-color);">Transfer terdeteksi, menunggu verifikasi sistem...</p>
-                        `;
-                    }
-                }
-
-                if (data && data.order_status === 'cancelled') {
-                    if (ShopCheckout.expiryTimer) clearInterval(ShopCheckout.expiryTimer);
-                    if (ShopCheckout.statusPollTimer) clearTimeout(ShopCheckout.statusPollTimer);
-                    ShopCheckout.showCancelledSection(orderNumber, 'Pesanan dibatalkan');
-                    return;
-                }
-
-                if (data && data.payment_status === 'paid') {
-                    const statusEl = (ShopCheckout.currentOrderData?.payment_method === 'transfer') 
-                        ? document.getElementById('paymentStatusTransfer') 
-                        : document.getElementById('paymentStatus');
-                    if (statusEl) {
-                        statusEl.innerHTML = `
-                            <i class="fas fa-check-circle" style="color: var(--secondary-color);"></i>
-                            <p style="color: var(--secondary-color);">Pembayaran terkonfirmasi!</p>
-                        `;
-                    }
-                    if (ShopCheckout.expiryTimer) clearInterval(ShopCheckout.expiryTimer);
-                    if (ShopCheckout.statusPollTimer) clearTimeout(ShopCheckout.statusPollTimer);
-
-                    // Auto redirect ke halaman pelacakan order
-                    const ord = ShopCheckout.currentOrderData?.order_number || orderNumber;
-                    const url = `order-status.php?code=${ord}`;
-                    setTimeout(() => { window.location.href = url; }, 1500);
-
-                    // Enable CTAs (share becomes visible)
-                    ShopCheckout.setCTAs(true);
-                    return; // Stop checking
-                }
-            } catch (error) {
-                console.error('Failed to check payment status:', error);
-            }
-
-            // Check again after 5 seconds
-            ShopCheckout.statusPollTimer = setTimeout(checkStatus, 5000);
-        };
-
-        checkStatus();
-    },
-
-    cancelOrder: async (orderNumber, reason = 'buyer_cancel') => {
-        try {
-            const res = await Utils.apiCall('?controller=order&action=cancel', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ order_number: orderNumber, reason })
-            });
-            if (res && res.success) {
-                if (ShopCheckout.expiryTimer) clearInterval(ShopCheckout.expiryTimer);
-                if (ShopCheckout.statusPollTimer) clearTimeout(ShopCheckout.statusPollTimer);
-                ShopCheckout.showCancelledSection(orderNumber, 'Pesanan dibatalkan oleh pembeli');
-                Utils.showAdvancedToast('Pesanan dibatalkan', 'warning', 'ban');
-            } else {
-                Utils.showToast(res?.error || 'Gagal membatalkan pesanan', 'error');
-            }
+            ShopState.cart = items
+            ShopState.save()
+            this.hide()
+            if (window.app && app.showToast) app.showToast('Pesanan dibatalkan. Silakan pilih metode pembayaran lain', 'info')
+          } else {
+            changeBtn.disabled = false
+            changeBtn.textContent = 'Ganti Metode Pembayaran'
+            if (window.app && app.showToast) app.showToast('Gagal membatalkan pesanan', 'error')
+          }
         } catch (e) {
-            Utils.showToast('Gagal membatalkan pesanan: ' + (e?.message || 'Unknown'), 'error');
+          changeBtn.disabled = false
+          changeBtn.textContent = 'Ganti Metode Pembayaran'
+          if (window.app && app.showToast) app.showToast('Gagal membatalkan pesanan', 'error')
         }
-    },
-
-    showCancelledSection: (orderNumber, message) => {
-        const paymentSection = document.getElementById('paymentSection');
-        if (paymentSection) paymentSection.style.display = 'none';
-        const cancelled = document.getElementById('orderCancelled');
-        if (cancelled) cancelled.style.display = 'block';
-        const num = document.getElementById('cancelledOrderNumber');
-        if (num) num.textContent = orderNumber;
-        const reason = document.getElementById('cancelledReason');
-        if (reason) reason.textContent = message || 'Pesanan dibatalkan.';
-        const track = document.getElementById('trackOrderLinkCancelled');
-        if (track) track.href = `order-status.php?code=${orderNumber}`;
-    },
-
-    // Manual confirm paid (cashier/user clicks)
-    manualConfirmPaid: async (orderNumber) => {
-        try {
-            const res = await Utils.apiCall('?controller=payment&action=manualUpdate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ order_number: orderNumber, confirm_paid: true })
-            });
-
-            if (res && res.success) {
-                Utils.showAdvancedToast('Pembayaran dikonfirmasi secara manual', 'success', 'check-circle');
-                const statusEl = (ShopCheckout.currentOrderData?.payment_method === 'transfer') 
-                    ? document.getElementById('paymentStatusTransfer') 
-                    : document.getElementById('paymentStatus');
-                if (statusEl) {
-                    statusEl.innerHTML = `
-                        <i class="fas fa-check-circle" style="color: var(--secondary-color);"></i>
-                        <p style="color: var(--secondary-color);">Pembayaran terkonfirmasi!</p>
-                    `;
-                }
-
-                // Stop timers and redirect to tracking
-                if (ShopCheckout.expiryTimer) clearInterval(ShopCheckout.expiryTimer);
-                if (ShopCheckout.statusPollTimer) clearTimeout(ShopCheckout.statusPollTimer);
-                const ord = orderNumber;
-                const url = `order-status.php?code=${ord}`;
-                setTimeout(() => { window.location.href = url; }, 1200);
-
-                // Enable CTAs (share becomes visible)
-                ShopCheckout.setCTAs(true);
-            } else {
-                Utils.showToast(res?.error || 'Gagal konfirmasi manual', 'error');
-            }
-        } catch (e) {
-            Utils.showToast('Gagal konfirmasi manual: ' + (e?.message || 'Unknown'), 'error');
-        }
-    },
-
-    // Buyer-side: request manual verification (sets intermediate flag only)
-    requestVerification: async (orderNumber, flag = 'qr_scanned') => {
-        try {
-            const res = await Utils.apiCall('?controller=payment&action=manualUpdate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ order_number: orderNumber, flag })
-            });
-            if (res && res.success) {
-                Utils.showAdvancedToast('Permintaan verifikasi dikirim', 'info', 'shield-alt');
-                return true;
-            }
-            throw new Error(res?.message || 'manualUpdate failed');
-        } catch (e) {
-            throw e;
-        }
-    },
-
-    // Countdown kedaluwarsa (QRIS/TRANSFER jika tersedia)
-    startExpiryCountdown: (expiredAt, elementId) => {
-        try {
-            if (ShopCheckout.expiryTimer) clearInterval(ShopCheckout.expiryTimer);
-            const el = document.getElementById(elementId);
-            if (!el || !expiredAt) return;
-
-            const target = new Date(expiredAt).getTime();
-
-            const format = (ms) => {
-                const totalSeconds = Math.floor(ms / 1000);
-                const h = Math.floor(totalSeconds / 3600);
-                const m = Math.floor((totalSeconds % 3600) / 60);
-                const s = totalSeconds % 60;
-                const hPrefix = h > 0 ? String(h).padStart(2, '0') + ':' : '';
-                return `${hPrefix}${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-            };
-
-            const tick = () => {
-                const now = Date.now();
-                const diff = Math.max(0, target - now);
-                if (diff <= 0) {
-                    el.textContent = 'QR telah kedaluwarsa';
-                    const statusEl = (ShopCheckout.currentOrderData?.payment_method === 'transfer') 
-                        ? document.getElementById('paymentStatusTransfer') 
-                        : document.getElementById('paymentStatus');
-                    if (statusEl) {
-                        statusEl.innerHTML = `
-                            <i class="fas fa-exclamation-circle" style="color: var(--accent-color);"></i>
-                            <p style="color: var(--accent-color);">Kode pembayaran kedaluwarsa. Silakan buat order baru.</p>`;
-                    }
-                    if (ShopCheckout.statusPollTimer) clearTimeout(ShopCheckout.statusPollTimer);
-                    clearInterval(ShopCheckout.expiryTimer);
-                    return;
-                }
-                el.textContent = `QR Code kedaluwarsa dalam ${format(diff)}`;
-            };
-
-            tick();
-            ShopCheckout.expiryTimer = setInterval(tick, 1000);
-        } catch (err) {
-            console.warn('Countdown error:', err);
-        }
+      }
     }
-};
-
-// Order Tracking
-const ShopOrderTracking = {
-    initialize: () => {
-        ShopOrderTracking.setupEventListeners();
-        ShopCart.updateCartCount();
-
-        // Check URL parameters (order number only)
-        const params = new URLSearchParams(window.location.search);
-        const orderNumber = params.get('order_number');
-
-        if (orderNumber) {
-            ShopOrderTracking.trackOrder(orderNumber);
+    this.el.style.display = 'grid'
+    const closeBtn = document.getElementById('closePayment')
+    if(closeBtn){ closeBtn.onclick = ()=>{ this.hide() } }
+    // Overlay interactions
+    this.el.addEventListener('click',(ev)=>{ if(ev.target && ev.target.id==='paymentSheet'){ this.hide() } })
+    document.addEventListener('keydown', this._escHandler)
+    // Start polling payment status
+    this.startPolling(num)
+  },
+  hide(){ if(this.el) this.el.style.display='none'; if(this.poller){ clearInterval(this.poller); this.poller=null } document.removeEventListener('keydown', this._escHandler) },
+  _escHandler(e){ if(e.key==='Escape'){ const ps=document.getElementById('paymentSheet'); if(ps) ps.style.display='none' } },
+  startPolling(orderNumber){ if(!orderNumber) return; if(this.poller) clearInterval(this.poller); this.poller = setInterval(async ()=>{ try {
+      const r = await Utils.apiCall(`?controller=order&action=check-payment&order_number=${encodeURIComponent(orderNumber)}`)
+      const meta = document.getElementById('paymentMeta')
+      if (r && r.success) {
+        const pay = r.data||{}
+        if(meta){ 
+          // Clear meta info - no expiry or status display as requested
+          meta.innerHTML = ''
         }
-    },
-
-    setupEventListeners: () => {
-        const trackForm = document.getElementById('trackOrderForm');
-        if (trackForm) {
-            trackForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const orderNumber = document.getElementById('orderNumber').value;
-                ShopOrderTracking.trackOrder(orderNumber);
-            });
+        const changeBtn = document.getElementById('changePaymentMethodBtn')
+        if (changeBtn) {
+          const ps = String(pay.payment_status||'').toLowerCase()
+          const os = String(pay.order_status||'').toLowerCase()
+          const pending = (!ps || ps==='pending') && (os!=='completed' && os!=='cancelled')
+          changeBtn.style.display = pending ? 'block' : 'none'
         }
-
-        const trackAnotherBtn = document.getElementById('trackAnotherBtn');
-        if (trackAnotherBtn) {
-            trackAnotherBtn.addEventListener('click', () => {
-                document.getElementById('trackFormSection').style.display = 'block';
-                document.getElementById('orderDetailsSection').style.display = 'none';
-            });
+        if (String(pay.payment_status).toLowerCase()==='success' || String(pay.order_status).toLowerCase()==='completed') {
+          clearInterval(this.poller); this.poller=null
         }
-    },
-
-    trackOrder: async (orderNumber) => {
-        try {
-            const response = await Utils.apiCall(`?controller=order&action=get-by-number&order_number=${orderNumber}`);
-            
-            if (response.success) {
-                ShopOrderTracking.displayOrderDetails(response.data);
-            }
-        } catch (error) {
-            Utils.showToast('Order tidak ditemukan', 'error');
-        }
-    },
-
-    displayOrderDetails: (order) => {
-        // Hide form, show details
-        document.getElementById('trackFormSection').style.display = 'none';
-        document.getElementById('orderDetailsSection').style.display = 'block';
-
-        // Set order info
-        document.getElementById('detailOrderNumber').textContent = order.order_number;
-        document.getElementById('detailOrderDate').textContent = Utils.formatDate(order.created_at);
-
-        // Update timeline
-        ShopOrderTracking.updateTimeline(order.order_status);
-
-        // Set payment status
-        ShopOrderTracking.setPaymentStatus(order.payment_status);
-        document.getElementById('paymentMethod').textContent = order.payment_method.toUpperCase();
-        document.getElementById('totalAmount').textContent = Utils.formatCurrency(order.total_amount);
-        
-        if (order.paid_at) {
-            document.getElementById('paidAtInfo').style.display = 'block';
-            document.getElementById('paidAt').textContent = Utils.formatDate(order.paid_at);
-        }
-
-        // Set customer info
-        document.getElementById('customerName').textContent = order.customer_name;
-        document.getElementById('customerEmail').textContent = order.customer_email;
-        document.getElementById('customerPhone').textContent = order.customer_phone;
-        document.getElementById('customerAddress').textContent = order.customer_address;
-
-        // Render order items
-        ShopOrderTracking.renderOrderItems(order.items);
-
-        // Set order summary
-        document.getElementById('orderSubtotal').textContent = Utils.formatCurrency(order.subtotal);
-        document.getElementById('orderTax').textContent = Utils.formatCurrency(order.tax_amount);
-        document.getElementById('orderShipping').textContent = Utils.formatCurrency(order.shipping_amount);
-        document.getElementById('orderTotal').textContent = Utils.formatCurrency(order.total_amount);
-    },
-
-    updateTimeline: (status) => {
-        const statuses = ['pending', 'processing', 'ready', 'completed'];
-        const currentIndex = statuses.indexOf(status);
-
-        document.querySelectorAll('.timeline-item').forEach((item, index) => {
-            if (index <= currentIndex) {
-                item.classList.add('active');
-            } else {
-                item.classList.remove('active');
-            }
-        });
-    },
-
-    setPaymentStatus: (status) => {
-        const badge = document.getElementById('paymentStatusBadge');
-        badge.className = `status-badge ${status}`;
-        badge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
-    },
-
-    renderOrderItems: (items) => {
-        const container = document.getElementById('orderItemsList');
-        if (!container) return;
-
-        container.innerHTML = items.map(item => `
-            <div class="order-item">
-                <img src="${Utils.resolveImageUrl(item.image, '../assets/img/product-placeholder.jpg')}" 
-                     alt="${item.product_name}" 
-                     class="order-item-image">
-                
-                <div class="order-item-info">
-                    <h4>${item.product_name}</h4>
-                    <p>${Utils.formatCurrency(item.unit_price)} x ${item.quantity}</p>
-                </div>
-                
-                <div style="font-weight: 700; color: var(--primary-color);">
-                    ${Utils.formatCurrency(item.total_price)}
-                </div>
-            </div>
-        `).join('');
-    }
-};
-
-// Track Order Modal (for index page)
-const setupTrackOrderModal = () => {
-    const modal = document.getElementById('trackOrderModal');
-    const openBtns = document.querySelectorAll('#trackOrderBtn, #trackOrderLink');
-    const closeBtn = document.getElementById('closeTrackModal');
-
-    openBtns.forEach(btn => {
-        btn?.addEventListener('click', (e) => {
-            e.preventDefault();
-            modal.classList.add('show');
-        });
-    });
-
-    closeBtn?.addEventListener('click', () => {
-        modal.classList.remove('show');
-    });
-
-    modal?.addEventListener('click', (e) => {
-        if (e.target.id === 'trackOrderModal') {
-            modal.classList.remove('show');
-        }
-    });
-
-    const trackForm = document.getElementById('trackOrderForm');
-    trackForm?.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const orderNumber = document.getElementById('trackOrderNumber').value;
-        window.location.href = `order-status.php?code=${orderNumber}`;
-    });
-};
-
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', () => {
-    // Reset local cart if PHP session has changed (first visit/new session)
-    try {
-        const sidMeta = document.querySelector('meta[name="php-session-id"]');
-        const currentSid = sidMeta ? sidMeta.content : null;
-        const storedSid = localStorage.getItem('bytebalok_cart_session');
-        if (currentSid && storedSid !== currentSid) {
-            localStorage.removeItem(STORAGE_KEY);
-            // Pastikan data pelanggan sebelumnya tidak ikut terisi otomatis
-            localStorage.removeItem('checkout_name');
-            localStorage.removeItem('checkout_email');
-            localStorage.removeItem('checkout_phone');
-            localStorage.removeItem('checkout_address');
-            localStorage.setItem('bytebalok_cart_session', currentSid);
-        }
-    } catch (e) { /* ignore */ }
-
-    // Update cart count everywhere
-    ShopCart.updateCartCount();
-
-    // Load public shop settings for tax (async)
-    if (!window.ShopSettings) {
-        window.ShopSettings = {
-            enableTaxShop: false,
-            taxRateShop: 0,
-            async load() {
-                try {
-                    const res = await Utils.apiCall('?controller=settings&action=get_public_shop');
-                    const data = res.data || {};
-                    const enabledRaw = data.enable_tax_shop;
-                    const enabled = (
-                        enabledRaw === true || enabledRaw === 1 ||
-                        (typeof enabledRaw === 'string' && enabledRaw.toLowerCase() === '1') ||
-                        (typeof enabledRaw === 'string' && enabledRaw.toLowerCase() === 'true')
-                    );
-                    this.enableTaxShop = enabled;
-                    this.taxRateShop = parseFloat(data.tax_rate_shop) || 0;
-                } catch (e) {
-                    // Defaults already set; no-op
-                } finally {
-                    // Refresh summaries after settings load
-                    ShopCart.updateSummary();
-                }
-            }
-        };
-    }
-    // Trigger settings load
-    if (window.ShopSettings && typeof ShopSettings.load === 'function') {
-        ShopSettings.load();
-    }
-
-    // Setup track order modal
-    setupTrackOrderModal();
-
-    // Setup product modal listeners
-    ShopProduct.setupModalListeners();
-
-    // Initialize based on current page
-    const path = window.location.pathname || '';
-    const onShopPage = (
-        path.includes('index.php') ||
-        path.endsWith('/shop/') ||
-        path.endsWith('/shop')
-    );
-    if (onShopPage) {
-        // Attach listeners early to avoid missing clicks
-        try { ShopCatalog.setupEventListeners(); } catch (e) { /* no-op */ }
-        ShopCatalog.initialize();
-    } else if (window.location.pathname.includes('cart.php')) {
-        ShopCart.loadCart();
-        
-        // Setup checkout button
-        const checkoutBtn = document.getElementById('checkoutBtn');
-        if (checkoutBtn) {
-            checkoutBtn.addEventListener('click', () => {
-                if (ShopCart.getCart().length > 0) {
-                    window.location.href = 'checkout.php';
-                } else {
-                    Utils.showToast('Your cart is empty', 'error');
-                }
-            });
-        }
-    } else if (window.location.pathname.includes('checkout.php')) {
-        // Checkout page initialization is called explicitly from the page
-    } else if (window.location.pathname.includes('order-status.php')) {
-        // Order tracking initialization is called explicitly from the page
-    }
-});
-
-// ============================================
-// NEW FEATURES - Promo Code Manager
-// ============================================
-const PromoCodeManager = {
-    // Kode promo untuk Kue Balok (in production, this would come from API)
-    promoCodes: {
-        'KUEBALOK10': { discount: 10, type: 'percentage', description: 'Diskon 10% untuk pelanggan baru' },
-        'HEMAT50K': { discount: 50000, type: 'fixed', description: 'Potongan Rp 50.000' },
-        'BALOK15': { discount: 15, type: 'percentage', description: 'Diskon 15% promo spesial' },
-        'GRATISANTAR': { discount: 25000, type: 'fixed', description: 'Gratis ongkir' }
-    },
-
-    appliedPromo: null,
-
-    initialize: () => {
-        const discountToggle = document.getElementById('discountToggle');
-        const discountForm = document.getElementById('discountForm');
-        const applyPromoBtn = document.getElementById('applyPromoBtn');
-        const removeDiscountBtn = document.getElementById('removeDiscountBtn');
-
-        if (discountToggle) {
-            discountToggle.addEventListener('click', () => {
-                const isHidden = discountForm.style.display === 'none';
-                discountForm.style.display = isHidden ? 'block' : 'none';
-                discountToggle.classList.toggle('active');
-            });
-        }
-
-        if (applyPromoBtn) {
-            applyPromoBtn.addEventListener('click', () => PromoCodeManager.applyPromoCode());
-        }
-
-        if (removeDiscountBtn) {
-            removeDiscountBtn.addEventListener('click', () => PromoCodeManager.removePromoCode());
-        }
-
-        // Allow Enter key to apply promo
-        const promoInput = document.getElementById('promoCode');
-        if (promoInput) {
-            promoInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    PromoCodeManager.applyPromoCode();
-                }
-            });
-        }
-    },
-
-    applyPromoCode: () => {
-        const promoInput = document.getElementById('promoCode');
-        const promoMessage = document.getElementById('promoMessage');
-        const code = promoInput.value.trim().toUpperCase();
-
-        if (!code) {
-            PromoCodeManager.showPromoMessage('Please enter a promo code', 'error');
-            return;
-        }
-
-        const promo = PromoCodeManager.promoCodes[code];
-        if (!promo) {
-            PromoCodeManager.showPromoMessage('Invalid promo code', 'error');
-            return;
-        }
-
-        PromoCodeManager.appliedPromo = { code, ...promo };
-        PromoCodeManager.showPromoMessage(`✓ ${promo.description} applied!`, 'success');
-        
-        // Update cart display
-        ShopCart.updateCartDisplay();
-        
-        // Show discount row
-        const discountRow = document.getElementById('discountRow');
-        if (discountRow) {
-            discountRow.style.display = 'flex';
-        }
-
-        // Hide promo form after successful application
-        setTimeout(() => {
-            const discountToggle = document.getElementById('discountToggle');
-            const discountForm = document.getElementById('discountForm');
-            if (discountForm && discountToggle) {
-                discountForm.style.display = 'none';
-                discountToggle.classList.remove('active');
-            }
-        }, 1500);
-    },
-
-    removePromoCode: () => {
-        PromoCodeManager.appliedPromo = null;
-        const discountRow = document.getElementById('discountRow');
-        const promoInput = document.getElementById('promoCode');
-        
-        if (discountRow) {
-            discountRow.style.display = 'none';
-        }
-        if (promoInput) {
-            promoInput.value = '';
-        }
-
-        ShopCart.updateCartDisplay();
-        Utils.showToast('Promo code removed', 'info');
-    },
-
-    showPromoMessage: (message, type) => {
-        const promoMessage = document.getElementById('promoMessage');
-        if (promoMessage) {
-            promoMessage.textContent = message;
-            promoMessage.className = `promo-message ${type}`;
-            promoMessage.style.display = 'block';
-
-            if (type === 'success') {
-                setTimeout(() => {
-                    promoMessage.style.display = 'none';
-                }, 3000);
-            }
-        }
-    },
-
-    calculateDiscount: (subtotal) => {
-        if (!PromoCodeManager.appliedPromo) return 0;
-
-        const promo = PromoCodeManager.appliedPromo;
-        if (promo.type === 'percentage') {
-            return subtotal * (promo.discount / 100);
-        } else {
-            return promo.discount;
-        }
-    },
-
-    getAppliedPromo: () => PromoCodeManager.appliedPromo
-};
-
-// ============================================
-// NEW FEATURES - WhatsApp Share Integration
-// ============================================
-const WhatsAppShare = {
-    shareOrder: (orderData) => {
-        const message = WhatsAppShare.formatOrderMessage(orderData);
-        const encodedMessage = encodeURIComponent(message);
-        const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
-        window.open(whatsappUrl, '_blank');
-    },
-
-    formatOrderMessage: (orderData) => {
-        const orderNumber = orderData.order_number || orderData.orderNumber || '-';
-        const total = orderData.total_amount ?? orderData.total ?? 0;
-        const paymentMethod = (orderData.payment_method || orderData.paymentMethod || '').toString().toUpperCase();
-        const items = Array.isArray(orderData.items) ? orderData.items : [];
-
-        let message = `🛍️ *BYTEBALOK ORDER CONFIRMATION*\n\n`;
-        message += `📋 Order Number: *${orderNumber}*\n`;
-        message += `📅 Date: ${new Date().toLocaleDateString('id-ID')}\n`;
-        message += `💰 Total: *${Utils.formatCurrency(total)}*\n`;
-        message += `💳 Payment: ${paymentMethod}\n\n`;
-
-        message += `📦 *Items:*\n`;
-        items.forEach((item, index) => {
-            const name = item.product_name || item.name || 'Item';
-            const qty = item.quantity || 1;
-            const unit = item.unit_price ?? item.price ?? 0;
-            message += `${index + 1}. ${name} x${qty} - ${Utils.formatCurrency(unit * qty)}\n`;
-        });
-
-    const trackUrl = `${window.location.origin}/shop/order-status.php?code=${encodeURIComponent(orderNumber)}`;
-        message += `\n✅ Thank you for shopping with Bytebalok!`;
-        message += `\n🔗 Track your order: ${trackUrl}`;
-
-        return message;
-    },
-
-    shareOrderTracking: (orderNumber, status, total) => {
-        let message = `📦 *ORDER STATUS UPDATE*\n\n`;
-        message += `Order #${orderNumber}\n`;
-        message += `Status: *${status.toUpperCase()}*\n`;
-        message += `Total: ${Utils.formatCurrency(total)}\n\n`;
-        message += `Track: ${window.location.origin}/shop/order-status.php?code=${orderNumber}`;
-        
-        const encodedMessage = encodeURIComponent(message);
-        const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
-        window.open(whatsappUrl, '_blank');
-    }
-};
-
-// ============================================
-// NEW FEATURES - Print Invoice Functionality
-// ============================================
-const PrintInvoice = {
-    printOrder: (orderData) => {
-        const printWindow = window.open('', '_blank');
-        const content = PrintInvoice.generateInvoiceHTML(orderData);
-        
-        printWindow.document.write(content);
-        printWindow.document.close();
-        
-        // Wait for content to load, then print
-        setTimeout(() => {
-            printWindow.focus();
-            printWindow.print();
-        }, 500);
-    },
-
-    generateInvoiceHTML: (orderData) => {
-        return `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Invoice - ${orderData.orderNumber}</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; padding: 40px; color: #000; }
-        .invoice-header { display: flex; justify-content: space-between; margin-bottom: 40px; border-bottom: 3px solid #000; padding-bottom: 20px; }
-        .logo { font-size: 28px; font-weight: bold; }
-        .invoice-details { text-align: right; }
-        .invoice-details h2 { font-size: 24px; margin-bottom: 10px; }
-        .section { margin-bottom: 30px; }
-        .section h3 { font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid #ccc; padding-bottom: 5px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background: #f0f0f0; font-weight: bold; }
-        .total-row { font-weight: bold; font-size: 16px; background: #f9f9f9; }
-        .grand-total { font-size: 18px; background: #e0e0e0; }
-        .footer { margin-top: 40px; text-align: center; color: #666; font-size: 12px; border-top: 1px solid #ccc; padding-top: 20px; }
-        @media print {
-            body { padding: 20px; }
-            @page { margin: 20mm; }
-        }
-    </style>
-</head>
-<body>
-    <div class="invoice-header">
-        <div>
-            <div class="logo">
-                <img src="${window.location.origin}/assets/img/logo.svg" alt="BYTEBALOK" style="height:32px; vertical-align:middle; margin-right:8px;">
-                BYTEBALOK
-            </div>
-            <p>Your Trusted Online Shop</p>
-            <p>Email: info@bytebalok.com</p>
-            <p>Phone: +62 21 1234 5678</p>
+      }
+    } catch(e){}
+    // Removed countdown timer as requested
+  }, 10000) }
+}
+const CustomerProgress = {
+  el: null,
+  code: null,
+  poller: null,
+  init() {
+    try { this.code = localStorage.getItem('bb_last_order') || null } catch (e) { this.code = null }
+    if (!this.code) return
+    this.ensureBanner()
+    this.start()
+  },
+  ensureBanner(){
+    this.el = document.getElementById('customerProgressBanner')
+    if (this.el) return
+    const div = document.createElement('div')
+    div.id = 'customerProgressBanner'
+    div.className = 'progress-banner'
+    div.innerHTML = `
+      <div class="progress-card">
+        <div class="progress-header">
+          <i class="fas fa-clipboard-check"></i>
+          <span>Progres Pesanan</span>
+          <button class="progress-close" aria-label="Tutup"><i class="fas fa-times"></i></button>
         </div>
-        <div class="invoice-details">
-            <h2>INVOICE</h2>
-            <p><strong>Order #:</strong> ${orderData.orderNumber}</p>
-            <p><strong>Date:</strong> ${new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-            <p><strong>Time:</strong> ${new Date().toLocaleTimeString('id-ID')}</p>
+        <div class="progress-body">
+          <div class="progress-steps">
+            <div class="step" data-step="pending"><span class="dot"></span><span class="label">Dibuat</span></div>
+            <div class="step" data-step="processing"><span class="dot"></span><span class="label">Diproses</span></div>
+            <div class="step" data-step="ready"><span class="dot"></span><span class="label">Siap</span></div>
+            <div class="step" data-step="completed"><span class="dot"></span><span class="label">Selesai</span></div>
+          </div>
+          <div class="progress-actions">
+            <button class="btn btn-outline" id="copyOrderCode"><i class="fas fa-copy mr-2"></i>Salin Order #</button>
+            <a class="btn btn-primary" id="openTrackLink" target="_blank"><i class="fas fa-search mr-2"></i>Lihat Status</a>
+          </div>
         </div>
-    </div>
-
-    <div class="section">
-        <h3>👤 Customer Information</h3>
-        <p><strong>Name:</strong> ${orderData.customerName || 'N/A'}</p>
-        <p><strong>Email:</strong> ${orderData.customerEmail || 'N/A'}</p>
-        <p><strong>Phone:</strong> ${orderData.customerPhone || 'N/A'}</p>
-        <p><strong>Address:</strong> ${orderData.customerAddress || 'N/A'}</p>
-    </div>
-
-    <div class="section">
-        <h3>📦 Order Items</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Product</th>
-                    <th>Quantity</th>
-                    <th>Unit Price</th>
-                    <th>Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${orderData.items.map((item, index) => `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td>${item.name}</td>
-                        <td>${item.quantity}</td>
-                        <td>${Utils.formatCurrency(item.price)}</td>
-                        <td>${Utils.formatCurrency(item.price * item.quantity)}</td>
-                    </tr>
-                `).join('')}
-                <tr class="total-row">
-                    <td colspan="4" style="text-align: right;">Subtotal:</td>
-                    <td>${Utils.formatCurrency(orderData.subtotal)}</td>
-                </tr>
-                <tr>
-                    <td colspan="4" style="text-align: right;">${(window.ShopSettings && ShopSettings.enableTaxShop) ? `Tax (${parseFloat(ShopSettings.taxRateShop) || 0}%):` : 'Tax (Inactive):'}</td>
-                    <td>${Utils.formatCurrency(orderData.tax)}</td>
-                </tr>
-                <tr>
-                    <td colspan="4" style="text-align: right;">Shipping:</td>
-                    <td>${Utils.formatCurrency(orderData.shipping || 0)}</td>
-                </tr>
-                ${orderData.discount ? `
-                    <tr style="color: green;">
-                        <td colspan="4" style="text-align: right;">Discount:</td>
-                        <td>-${Utils.formatCurrency(orderData.discount)}</td>
-                    </tr>
-                ` : ''}
-                <tr class="grand-total">
-                    <td colspan="4" style="text-align: right;">TOTAL:</td>
-                    <td>${Utils.formatCurrency(orderData.total)}</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-
-    <div class="section">
-        <h3>💳 Payment Information</h3>
-        <p><strong>Payment Method:</strong> ${orderData.paymentMethod || 'N/A'}</p>
-        <p><strong>Payment Status:</strong> ${orderData.paymentStatus || 'Pending'}</p>
-    </div>
-
-    <div class="footer">
-        <p>Thank you for shopping with Bytebalok!</p>
-        <p>For support, please contact us at info@bytebalok.com</p>
-        <p>This is a computer-generated invoice and does not require a signature.</p>
-    </div>
-</body>
-</html>
+      </div>`
+    document.body.appendChild(div)
+    const closeBtn = div.querySelector('.progress-close')
+    if (closeBtn) closeBtn.addEventListener('click', ()=>{ div.style.display='none' })
+    const copyBtn = div.querySelector('#copyOrderCode')
+    if (copyBtn) copyBtn.addEventListener('click', async ()=>{
+      try { await navigator.clipboard.writeText(this.code||'') ; if (window.app && app.showToast) app.showToast('Order number disalin','success') } catch(e){}
+    })
+    const trackLink = div.querySelector('#openTrackLink')
+    if (trackLink) trackLink.href = `order-status.php?code=${encodeURIComponent(this.code||'')}`
+  },
+  update(status){
+    if (!this.el) return
+    const st = String(status||'pending').toLowerCase()
+    const steps = ['pending','processing','ready','completed']
+    steps.forEach(s=>{
+      const node = this.el.querySelector(`.step[data-step="${s}"]`)
+      if (!node) return
+      node.classList.toggle('active', s===st)
+      node.classList.toggle('done', steps.indexOf(s) < steps.indexOf(st))
+    })
+    this.el.style.display = 'block'
+  },
+  start(){
+    if (!this.code) return
+    if (this.poller) clearInterval(this.poller)
+    const tick = async ()=>{
+      try {
+        const r = await Utils.apiCall(`?controller=order&action=check-payment&order_number=${encodeURIComponent(this.code)}`)
+        if (r && r.success){
+          const st = r.data?.order_status || 'pending'
+          this.update(st)
+          if (String(st).toLowerCase()==='completed' || String(st).toLowerCase()==='cancelled'){
+            clearInterval(this.poller); this.poller=null
+            try { localStorage.removeItem('bb_last_order') } catch(e){}
+          }
+        }
+      } catch(e){}
+    }
+    tick()
+    this.poller = setInterval(tick, 8000)
+  }
+}
+const TrackOrderPage = {
+  init() {
+    const form = document.getElementById('trackOrderForm');
+    if (!form) return;
+    
+    const input = document.getElementById('trackOrderNumber');
+    const result = document.getElementById('orderStatusResult');
+    const loadingEl = document.getElementById('trackLoading');
+    
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = input.value.trim();
+      if (!code) return;
+      
+      // Show loading state
+      if (loadingEl) {
+        loadingEl.style.display = 'block';
+        loadingEl.innerHTML = '<div class="spinner"></div>';
+      }
+      result.style.display = 'none';
+      
+      try {
+        const r = await Utils.apiCall(`?controller=order&action=get-by-number&order_number=${encodeURIComponent(code)}`);
+        
+        if (loadingEl) loadingEl.style.display = 'none';
+        
+        if (r?.success) {
+          const d = r.data || {};
+          result.style.display = 'block';
+          result.innerHTML = TrackOrderPage.renderStatusCard(d, code);
+          TrackOrderPage.startPolling(code, result);
+        } else {
+          result.style.display = 'block';
+          result.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon"><i class="fas fa-search"></i></div>
+              <div class="empty-title">Pesanan tidak ditemukan</div>
+              <div class="empty-description">Pastikan nomor order yang Anda masukkan benar</div>
+            </div>
+          `;
+        }
+      } catch (e) {
+        if (loadingEl) loadingEl.style.display = 'none';
+        result.style.display = 'block';
+        result.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon"><i class="fas fa-exclamation-triangle"></i></div>
+            <div class="empty-title">Gagal mengambil status pesanan</div>
+            <div class="empty-description">Silakan coba lagi nanti</div>
+          </div>
         `;
-    }
-};
-
-// ============================================
-// NEW FEATURES - Skeleton Loading Manager
-// ============================================
-const SkeletonLoader = {
-    show: (containerId = 'skeletonGrid') => {
-        const skeleton = document.getElementById(containerId);
-        if (skeleton) {
-            skeleton.style.display = 'grid';
+      }
+    });
+    // Auto-submit if code provided via URL
+    try {
+      const preset = (input && input.value || '').trim()
+      if (preset) {
+        setTimeout(()=>{ form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }, 50)
+      }
+    } catch(e){}
+  },
+  renderStatusCard(d, code){
+    const steps = [
+      { key: 'pending', title: 'Pesanan Dibuat', sub: 'Menunggu diproses', icon: 'clock' },
+      { key: 'processing', title: 'Diproses', sub: 'Sedang dipersiapkan', icon: 'tools' },
+      { key: 'ready', title: 'Siap', sub: 'Siap diambil/dikirim', icon: 'box-open' },
+      { key: 'completed', title: 'Selesai', sub: 'Pesanan selesai', icon: 'check-circle' }
+    ];
+    const status = String(d.order_status||'pending').toLowerCase();
+    const idx = steps.findIndex(s=>s.key===status);
+    const activeIdx = idx>=0?idx:0;
+    const progress = `
+      <div class="order-progress">
+        ${steps.map((s,i)=>`
+          <div class="order-step ${i<activeIdx?'done':''} ${i===activeIdx?'active':''}">
+            <div class="step-icon"><i class="fas fa-${s.icon}"></i></div>
+            <div class="step-title">${s.title}</div>
+            <div class="step-sub">${s.sub}</div>
+          </div>
+        `).join('')}
+      </div>`;
+    const itemsHtml = (d.items&&d.items.length)?`
+      <div class="mt-4">
+        <h4 class="text-sm font-semibold text-gray-700 mb-2">Detail Items</h4>
+        <div class="space-y-2">
+          ${d.items.map((item)=>`
+            <div class="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
+              <div class="flex-1">
+                <div class="font-medium text-sm">${item.name || item.product_name || 'Item'}</div>
+                <div class="text-xs text-gray-500">${item.quantity || item.qty || 1} × ${Utils.formatCurrency(item.unit_price || item.price || 0)}</div>
+              </div>
+              <div class="font-semibold text-sm">${Utils.formatCurrency(item.total_price || ((item.unit_price || item.price || 0) * (item.quantity || item.qty || 1)))}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>`:'';
+    return `
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Order #${d.order_number || code}</h3>
+          <span class="badge badge-${status==='completed' ? 'success' : status==='cancelled' ? 'error' : status==='ready' ? 'primary' : status==='processing' ? 'info' : 'warning'}">${d.order_status || '-'}</span>
+        </div>
+        <div class="card-body">
+          ${progress}
+          <div class="info-grid">
+            <div class="info-item"><span class="info-label">Status Order</span><span class="info-value">${d.order_status || '-'}</span></div>
+            <div class="info-item"><span class="info-label">Status Pembayaran</span><span class="info-value">${d.payment_status || '-'}</span></div>
+            <div class="info-item"><span class="info-label">Total</span><span class="info-value font-bold">${Utils.formatCurrency(d.total_amount || 0)}</span></div>
+            ${d.created_at ? `<div class="info-item"><span class="info-label">Tanggal</span><span class="info-value">${new Date(d.created_at).toLocaleDateString('id-ID')}</span></div>` : ''}
+          </div>
+          ${itemsHtml}
+        </div>
+      </div>`;
+  },
+  startPolling(code, container){
+    if (!code) return;
+    const intervalMs = 5000;
+    if (this._poller) clearInterval(this._poller);
+    this._poller = setInterval(async ()=>{
+      try {
+        const r = await Utils.apiCall(`?controller=order&action=get-by-number&order_number=${encodeURIComponent(code)}`);
+        if (r?.success) {
+          const d = r.data || {};
+          if (container) { container.innerHTML = TrackOrderPage.renderStatusCard(d, code); container.classList.add('status-refresh'); setTimeout(()=>container.classList.remove('status-refresh'), 260) }
+          const st = String(d.order_status||'').toLowerCase();
+          if (st==='completed' || st==='cancelled') { clearInterval(this._poller); this._poller=null; }
         }
-    },
-
-    hide: (containerId = 'skeletonGrid') => {
-        const skeleton = document.getElementById(containerId);
-        if (skeleton) {
-            skeleton.style.display = 'none';
-        }
-    }
-};
-
-// Update ShopCart to include discount calculation
-const originalUpdateCartDisplay = ShopCart.updateCartDisplay;
-if (originalUpdateCartDisplay) {
-    ShopCart.updateCartDisplay = function() {
-        originalUpdateCartDisplay.call(this);
-        
-        // Add discount calculation
-        const discount = PromoCodeManager.calculateDiscount(ShopCart.getTotal());
-        if (discount > 0) {
-            const discountElement = document.getElementById('summaryDiscount');
-            if (discountElement) {
-                discountElement.textContent = '-' + Utils.formatCurrency(discount);
-            }
-            
-            // Update total with discount
-            const totalElement = document.getElementById('summaryTotal');
-            if (totalElement) {
-                const newTotal = ShopCart.getTotal() + ShopCart.getTax() - discount;
-                totalElement.textContent = Utils.formatCurrency(newTotal);
-            }
-        }
-    };
+      } catch(e) {}
+    }, intervalMs);
+  }
 }
-
-// Update ShopCatalog to use skeleton loading
-const originalInitialize = ShopCatalog.initialize;
-if (originalInitialize) {
-    ShopCatalog.initialize = async function() {
-        SkeletonLoader.show('skeletonGrid');
-        await originalInitialize.call(this);
-        setTimeout(() => SkeletonLoader.hide('skeletonGrid'), 500);
-    };
-}
-
-// Export for use in other scripts
-window.ShopCart = ShopCart;
-window.ShopCatalog = ShopCatalog;
-window.ShopProduct = ShopProduct;
-window.ShopCheckout = ShopCheckout;
-window.ShopOrderTracking = ShopOrderTracking;
-window.ShopUtils = Utils;
-window.PromoCodeManager = PromoCodeManager;
-window.WhatsAppShare = WhatsAppShare;
-window.PrintInvoice = PrintInvoice;
-window.SkeletonLoader = SkeletonLoader;
-
+document.addEventListener('DOMContentLoaded',()=>{
+  (function(){ const w = window.innerWidth; document.documentElement.classList.add('density-compact') })()
+  const header = document.querySelector('.shop-header');
+  if (header) {
+    const setOffset = () => { document.documentElement.style.setProperty('--sticky-offset', header.offsetHeight + 'px') }
+    setOffset()
+    window.addEventListener('resize', setOffset, { passive: true })
+  }
+  const path = window.location.pathname
+  if (path.includes('/shop/') || path.endsWith('/shop')){ Catalog.init() }
+  if (path.includes('cart.php')){ CartPage.init() }
+  if (path.includes('checkout.php')){ CheckoutPage.init() }
+  if (path.includes('order-status.php')){ TrackOrderPage.init() }
+  CustomerProgress.init()
+})
