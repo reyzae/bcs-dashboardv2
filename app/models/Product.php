@@ -116,7 +116,7 @@ class Product extends BaseModel {
         $sql = "SELECT p.*, p.price as unit_price, c.name as category_name 
                 FROM {$this->table} p 
                 LEFT JOIN categories c ON p.category_id = c.id 
-                WHERE p.is_active = 1 AND p.stock_quantity <= p.min_stock_level 
+                WHERE p.is_active = 1 AND p.stock_quantity < p.min_stock_level 
                 ORDER BY p.stock_quantity ASC, p.name ASC";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute();
@@ -164,7 +164,7 @@ class Product extends BaseModel {
         $stats['active'] = $this->count(['is_active' => 1]);
         
         // Low stock products
-        $sql = "SELECT COUNT(*) as count FROM {$this->table} WHERE is_active = 1 AND stock_quantity <= min_stock_level";
+        $sql = "SELECT COUNT(*) as count FROM {$this->table} WHERE is_active = 1 AND stock_quantity < min_stock_level";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute();
         $result = $stmt->fetch();

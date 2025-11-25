@@ -83,7 +83,7 @@ $user_name = $_SESSION['user_name'] ?? 'User';
             margin: 0;
             font-size: 28px;
             font-weight: 700;
-            color: #000000;
+            color: #ffffff;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         
@@ -174,6 +174,7 @@ $user_name = $_SESSION['user_name'] ?? 'User';
             color: #111827;
             white-space: nowrap;
             margin-left: 15px;
+            text-align: right;
         }
         
         .receipt-summary {
@@ -189,6 +190,8 @@ $user_name = $_SESSION['user_name'] ?? 'User';
             margin-bottom: 10px;
             font-size: 14px;
         }
+
+        .summary-row span:last-child { text-align: right; min-width: 140px; display: inline-block; }
         
         .summary-row:last-child {
             margin-bottom: 0;
@@ -247,14 +250,41 @@ $user_name = $_SESSION['user_name'] ?? 'User';
             margin-bottom: 12px;
         }
         
-        .print-actions {
+        :root { --primary-color: #16a34a; --primary-dark: #15803d; }
+
+        .fab-container {
             position: fixed;
-            top: 20px;
+            bottom: 20px;
             right: 20px;
             display: flex;
-            gap: 10px;
+            flex-direction: column;
+            gap: 12px;
             z-index: 1000;
         }
+
+        .fab-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            transition: transform .2s ease, box-shadow .2s ease;
+            color: #fff;
+        }
+
+        .fab-btn i { color: #fff; font-size: 18px; }
+
+        .fab-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 24px rgba(0,0,0,0.2); }
+
+        .fab-print { background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%); }
+        .fab-back { background: #374151; }
+        .fab-whatsapp { background: #25D366; }
+        .fab-btn.disabled { background: #9ca3af; cursor: not-allowed; pointer-events: none; }
+        .fab-toggle { background: #10b981; font-weight: 700; }
         
         .btn {
             padding: 12px 24px;
@@ -325,15 +355,17 @@ $user_name = $_SESSION['user_name'] ?? 'User';
                 padding: 0;
             }
             
-            .print-actions {
-                display: none !important;
-            }
+            .fab-container { display: none !important; }
             
             .receipt-container {
                 box-shadow: none;
                 max-width: 100%;
                 border-radius: 0;
             }
+            .receipt-header { background: #ffffff !important; color: #000 !important; }
+            .receipt-header h1 { color: #000 !important; }
+            .receipt-info, .receipt-summary, .payment-info { background: #ffffff !important; }
+            .section-title { border-bottom-color: #000 !important; color: #000 !important; }
         }
         
         @media (max-width: 480px) {
@@ -345,11 +377,8 @@ $user_name = $_SESSION['user_name'] ?? 'User';
                 border-radius: 8px;
             }
             
-            .print-actions {
-                top: 10px;
-                right: 10px;
-                flex-direction: column;
-            }
+            .fab-container { bottom: 10px; right: 10px; }
+            .fab-btn { width: 44px; height: 44px; }
             
             .btn {
                 padding: 10px 16px;
@@ -359,16 +388,18 @@ $user_name = $_SESSION['user_name'] ?? 'User';
     </style>
 </head>
 <body>
-    <!-- Print Actions -->
-    <div class="print-actions">
-        <a href="transactions.php" class="btn btn-secondary">
+    <!-- Floating CTAs -->
+    <div class="fab-container">
+        <a href="transactions.php" class="fab-btn fab-back" title="Back">
             <i class="fas fa-arrow-left"></i>
-            <span>Back</span>
         </a>
-        <button class="btn btn-primary" onclick="window.print()">
+        <button class="fab-btn fab-print" onclick="window.print()" title="Print Receipt" aria-label="Print Receipt">
             <i class="fas fa-print"></i>
-            <span>Print Receipt</span>
         </button>
+        <button id="waTargetToggle" class="fab-btn fab-toggle" title="WhatsApp target" aria-label="WhatsApp target">C</button>
+        <a id="whatsappShareBtn" class="fab-btn fab-whatsapp" target="_blank" rel="noopener" title="Share to WhatsApp">
+            <i class="fab fa-whatsapp"></i>
+        </a>
     </div>
     
     <!-- Receipt Container -->
@@ -472,6 +503,24 @@ $user_name = $_SESSION['user_name'] ?? 'User';
             }).format(num);
         };
 
+        // Normalize phone number to WhatsApp format (Indonesia)
+        const normalizePhoneToWa = (phone) => {
+            try {
+                let p = String(phone || '').trim();
+                // Remove non-digit
+                p = p.replace(/[^0-9]/g, '');
+                if (!p) return '';
+                // If starts with 62, keep
+                if (p.startsWith('62')) return p;
+                // If starts with 0, convert to 62
+                if (p.startsWith('0')) return '62' + p.slice(1);
+                // If starts with 8 (common local), prepend 62
+                if (p.startsWith('8')) return '62' + p;
+                // Fallback: ensure has country code
+                return '62' + p;
+            } catch { return ''; }
+        };
+
         // Format date helper
         const formatDate = (dateString) => {
             const date = new Date(dateString);
@@ -526,11 +575,6 @@ $user_name = $_SESSION['user_name'] ?? 'User';
                 
                 if (transactionResult.success && transactionResult.data) {
                     renderReceipt(transactionResult.data, settingsResult);
-                    
-                    // Auto print after 1 second
-                    setTimeout(() => {
-                        window.print();
-                    }, 1000);
                 } else {
                     showError(transactionResult.error || 'Transaction not found');
                 }
@@ -622,6 +666,60 @@ $user_name = $_SESSION['user_name'] ?? 'User';
                 </p>
             `;
             document.querySelector('.receipt-container').appendChild(footer);
+
+            // Prepare WhatsApp share link & target toggle
+            try {
+                const itemsText = (Array.isArray(transaction.items) ? transaction.items : []).map(it => {
+                    const q = toNumber(it.quantity) || 0;
+                    const p = formatCurrency(it.unit_price);
+                    const t = formatCurrency(it.total_price);
+                    return `- ${q} × ${it.product_name || 'Item'} @ ${p} = ${t}`;
+                }).join('\n');
+                const shareText = [
+                    `Receipt ${transaction.transaction_number || ''}`,
+                    `Date: ${formatDate(transaction.created_at)}`,
+                    `Total: ${formatCurrency(total)}`,
+                    itemsText ? 'Items:\n' + itemsText : '' ,
+                    `Link: ${window.location.href}`
+                ].filter(Boolean).join('\n');
+                const waBtn = document.getElementById('whatsappShareBtn');
+                const toggle = document.getElementById('waTargetToggle');
+                const getTargetPref = () => localStorage.getItem('receiptWaTarget') || 'customer';
+                const setTargetPref = (val) => localStorage.setItem('receiptWaTarget', val);
+                function deriveNumberByTarget(target) {
+                    const phone = target === 'customer'
+                        ? (transaction.customer_phone || transaction.customerPhone || transaction.customer_phone_number || transaction.customer_mobile || '')
+                        : (settings.company_phone || '+6285121010199');
+                    return normalizePhoneToWa(phone);
+                }
+                function applyTarget() {
+                    const target = getTargetPref();
+                    if (toggle) toggle.textContent = target === 'customer' ? 'C' : 'A';
+                    const normalized = deriveNumberByTarget(target);
+                    if (waBtn) {
+                        const url = normalized ? `https://wa.me/${normalized}?text=${encodeURIComponent(shareText)}` : `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+                        waBtn.setAttribute('href', url);
+                        if (!normalized) {
+                            waBtn.classList.add('disabled');
+                            waBtn.setAttribute('aria-disabled', 'true');
+                            waBtn.setAttribute('title', 'Nomor tidak tersedia');
+                        } else {
+                            waBtn.classList.remove('disabled');
+                            waBtn.removeAttribute('aria-disabled');
+                            waBtn.setAttribute('title', 'Share to WhatsApp');
+                        }
+                    }
+                }
+                applyTarget();
+                if (toggle) {
+                    toggle.addEventListener('click', () => {
+                        const current = getTargetPref();
+                        const next = current === 'customer' ? 'admin' : 'customer';
+                        setTargetPref(next);
+                        applyTarget();
+                    });
+                }
+            } catch (e) { /* ignore */ }
         }
         
         // Escape HTML helper
@@ -651,6 +749,18 @@ $user_name = $_SESSION['user_name'] ?? 'User';
         
         // Load transaction when page loads
         document.addEventListener('DOMContentLoaded', loadTransaction);
+
+        // Keyboard shortcuts: P=print, W=share WhatsApp, ESC=back
+        document.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'p') { e.preventDefault(); window.print(); }
+            if (e.key.toLowerCase() === 'w') {
+                const waBtn = document.getElementById('whatsappShareBtn');
+                if (waBtn && !waBtn.classList.contains('disabled')) {
+                    waBtn.click();
+                }
+            }
+            if (e.key === 'Escape') { window.location.href = 'transactions.php'; }
+        });
     </script>
 </body>
 </html>

@@ -270,11 +270,18 @@ class BytebalokApp {
 
         const response = await fetch(url, mergedOptions);
         
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        // Try to parse JSON response regardless of status code
+        try {
+            const data = await response.json();
+            return data;
+        } catch (jsonError) {
+            // If JSON parsing fails, throw the HTTP error
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            // If response was OK but JSON parsing failed, throw JSON error
+            throw jsonError;
         }
-
-        return await response.json();
     }
 
     convertEndpoint(endpoint) {

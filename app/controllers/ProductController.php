@@ -24,6 +24,8 @@ class ProductController extends BaseController {
      * Get list of products
      */
     public function list() {
+        $this->checkAuthentication();
+        $this->checkPermission('products.view');
         $page = intval($_GET['page'] ?? 1);
         $limit = intval($_GET['limit'] ?? 20);
         $search = $_GET['search'] ?? '';
@@ -372,6 +374,184 @@ class ProductController extends BaseController {
             error_log('Image upload error: ' . $e->getMessage());
             $this->sendError('Failed to upload image: ' . $e->getMessage(), 500);
         }
+    }
+    
+    /**
+     * Export products to CSV/Excel
+     */
+    public function export() {
+        $format = $_GET['format'] ?? 'csv';
+        $search = $_GET['search'] ?? '';
+        $categoryId = $_GET['category_id'] ?? '';
+        $status = $_GET['status'] ?? '';
+        
+        // Build query
+        $sql = "SELECT 
+                    p.id,
+                    p.name,
+                    p.sku,
+                    p.barcode,
+                    c.name as category_name,
+                    p.price,
+                    p.cost_price,
+                    p.stock_quantity,
+                    p.min_stock_level,
+                    p.unit,
+                    p.description,
+                    p.is_active,
+                    p.created_at,
+                    p.updated_at,
+                    vp.times_sold,
+                    vp.total_quantity_sold,
+                    vp.total_revenue,
+                    vp.estimated_profit,
+                    vp.last_sold_date
+                FROM products p
+                LEFT JOIN categories c ON p.category_id = c.id
+                LEFT JOIN v_product_performance vp ON vp.id = p.id
+                WHERE 1=1";
+        
+        $params = [];
+        
+        // Search filter
+        if ($search) {
+            $sql .= " AND (p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?)";
+            $params[] = "%$search%";
+            $params[] = "%$search%";
+            $params[] = "%$search%";
+        }
+        
+        // Category filter
+        if ($categoryId) {
+            $sql .= " AND p.category_id = ?";
+            $params[] = $categoryId;
+        }
+        
+        // Status filter
+        if ($status !== '') {
+            $sql .= " AND p.is_active = ?";
+            $params[] = intval($status);
+        }
+        
+        $sql .= " ORDER BY p.name ASC";
+        
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Prepare data for export
+        $data = [];
+        foreach ($products as $product) {
+            $data[] = [
+                $product['sku'],
+                $product['name'],
+                $product['category_name'] ?? 'No Category',
+                $product['barcode'] ?? '-',
+                ExportHelper::formatCurrency($product['price']),
+                ExportHelper::formatCurrency($product['cost_price']),
+                $product['stock_quantity'],
+                $product['unit'] ?? 'pcs',
+                $product['min_stock_level'],
+                (int)($product['times_sold'] ?? 0),
+                (int)($product['total_quantity_sold'] ?? 0),
+                ExportHelper::formatCurrency((float)($product['total_revenue'] ?? 0)),
+                ExportHelper::formatCurrency((float)($product['estimated_profit'] ?? 0)),
+                !empty($product['last_sold_date']) ? ExportHelper::formatDate($product['last_sold_date'], 'd/m/Y') : '-',
+                $product['is_active'] ? 'Active' : 'Inactive',
+                ExportHelper::formatDate($product['created_at'], 'd/m/Y')
+            ];
+        }
+        
+        $headers = [
+            'SKU',
+            'Product Name',
+            'Category',
+            'Barcode',
+            'Price',
+            'Cost Price',
+            'Stock Quantity',
+            'Unit',
+            'Min Stock',
+            'Times Sold',
+            'Total Quantity Sold',
+            'Total Revenue',
+            'Estimated Profit',
+            'Last Sold Date',
+            'Status',
+            'Created Date'
+        ];
+        
+        $filename = 'products_' . date('Y-m-d_His') . '.' . $format;
+        
+        try {
+            if ($format === 'excel' || $format === 'xlsx') {
+                $filepath = ExportHelper::exportToExcel($data, $filename, $headers, 'Products');
+            } else if ($format === 'pdf') {
+                $html = ExportHelper::generateHTMLTable($data, $headers, 'Products');
+                $filepath = ExportHelper::exportToPDF($html, $filename, 'L');
+            } else {
+                // Default to CSV
+                $filepath = ExportHelper::exportToCSV($data, $filename, $headers);
+            }
+            
+            // Send file to browser
+            if (file_exists($filepath)) {
+                header('Content-Type: application/octet-stream');
+                header('Content-Disposition: attachment; filename="' . basename($filepath) . '"');
+                header('Content-Length: ' . filesize($filepath));
+                header('Cache-Control: must-revalidate');
+                header('Pragma: public');
+                
+                readfile($filepath);
+                
+                // Clean up - delete file after sending
+                unlink($filepath);
+                exit;
+            } else {
+                $this->sendError('Failed to generate export file', 500);
+            }
+            
+        } catch (Exception $e) {
+            error_log("Export Error: " . $e->getMessage());
+            $this->sendError('Export failed: ' . $e->getMessage(), 500);
+        }
+    }
+}
+
+// Routing
+if (!isset($_GET['controller'])) {
+    $productController = new ProductController($pdo);
+    $action = $_GET['action'] ?? '';
+    switch ($action) {
+        case 'list':
+            $productController->list();
+            break;
+        case 'create':
+            $productController->create();
+            break;
+        case 'update':
+            $productController->update();
+            break;
+        case 'delete':
+            $productController->delete();
+            break;
+        case 'updateStock':
+            $productController->updateStock();
+            break;
+        case 'getLowStock':
+            $productController->getLowStock();
+            break;
+        case 'getStats':
+            $productController->getStats();
+            break;
+        case 'uploadImage':
+            $productController->uploadImage();
+            break;
+        case 'export':
+            $productController->export();
+            break;
+        default:
+            $productController->sendError('Invalid action', 400);
     }
 }
 

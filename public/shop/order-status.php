@@ -76,7 +76,7 @@ $code = $_GET['code'] ?? '';
                         
                         <div class="mt-6 text-center">
                             <p class="text-sm text-gray-500 mb-2">Butuh bantuan?</p>
-                            <a href="https://wa.me/6281234567890" class="btn btn-outline btn-sm" target="_blank">
+                            <a id="shopSupportWhatsApp" href="#" class="btn btn-outline btn-sm" target="_blank">
                                 <i class="fab fa-whatsapp mr-2"></i>Hubungi CS
                             </a>
                         </div>
@@ -90,8 +90,22 @@ $code = $_GET['code'] ?? '';
                 </div>
             </div>
         </section>
-    </main>
+</main>
 
     <script src="../assets/js/shop.js"></script>
+    <script>
+    (function(){
+        const el = document.getElementById('shopSupportWhatsApp');
+        if (!el) return;
+        fetch('../api.php?controller=settings&action=get&key=company_phone')
+            .then(r => r.json())
+            .then(res => {
+                const phone = (res && res.success && res.data && res.data.value) ? res.data.value : '+6285121010199';
+                const normalized = String(phone).replace(/[^0-9]/g,'');
+                el.href = `https://wa.me/${normalized}`;
+            })
+            .catch(() => { el.href = 'https://wa.me/6285121010199'; });
+    })();
+    </script>
 </body>
 </html>

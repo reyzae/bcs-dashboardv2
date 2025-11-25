@@ -199,111 +199,57 @@ require_once 'includes/header.php';
     color: #991b1b;
 }
 
-/* MODAL - FORCE OVERRIDE ALL STYLES */
 .modal-modern {
-    display: none !important;
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    background: rgba(0,0,0,0.5) !important;
-    backdrop-filter: blur(4px) !important;
-    z-index: 999999 !important; /* Super high z-index */
-    align-items: center !important;
-    justify-content: center !important;
-    animation: fadeIn 0.2s ease !important;
-    padding: 1rem !important;
-    pointer-events: auto !important; /* Force clickable */
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.5);
+    z-index: 1050;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    padding: 1rem;
 }
 
 .modal-modern.show {
-    display: flex !important;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
 }
-
-.modal-modern.closing {
-    display: none !important;
-}
-
-.modal-content-modern.closing {
-    pointer-events: none !important;
-}
-
-/* Fallback: hidden attribute always hides modal */
-.modal-modern[hidden] {
-    display: none !important;
-}
-
-/* Inline style display:flex overrides display:none */
-/* Remove reliance on inline styles for display; use .show class only */
 
 .modal-content-modern {
-    background: white !important;
-    border-radius: 20px !important;
-    max-width: 600px !important;
-    width: 90% !important;
-    max-height: 90vh !important;
-    overflow-y: auto !important;
-    animation: slideUp 0.3s ease !important;
-    position: relative !important;
-    z-index: 1000000 !important;
-    pointer-events: auto !important; /* CRITICAL: Must be clickable */
+    background: #fff;
+    border-radius: 16px;
+    max-width: 640px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    transform: scale(0.98);
+    transition: transform 0.2s ease;
+}
+
+.modal-modern.show .modal-content-modern {
+    transform: scale(1);
 }
 
 .modal-header-modern {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-    color: white !important;
-    padding: 1.5rem !important;
-    border-radius: 20px 20px 0 0 !important;
-    display: flex !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    position: relative !important;
-    z-index: 1000001 !important;
-}
-
-/* SUPER IMPORTANT: Force buttons to be clickable */
-.modal-header-modern button,
-#modalCloseBtn,
-#modalCancelBtn {
-    position: relative !important;
-    z-index: 99999999 !important; /* MAXIMUM z-index */
-    pointer-events: auto !important;
-    cursor: pointer !important;
-    border: none !important;
-    touch-action: auto !important;
-    user-select: none !important;
-}
-
-/* Ensure no pseudo elements block clicks */
-.modal-header-modern button::before,
-.modal-header-modern button::after,
-#modalCloseBtn::before,
-#modalCloseBtn::after,
-#modalCancelBtn::before,
-#modalCancelBtn::after {
-    pointer-events: none !important;
-}
-
-.modal-header-modern button:hover,
-#modalCloseBtn:hover {
-    opacity: 1 !important;
-    transform: scale(1.1) !important;
-}
-
-/* Force all buttons in modal to be clickable */
-.modal-modern button,
-.modal-modern .btn-modern {
-    pointer-events: auto !important;
-    cursor: pointer !important;
-    user-select: none !important;
-    -webkit-user-select: none !important;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .modal-body-modern {
-    padding: 2rem;
-    position: relative;
-    z-index: 10000;
+    padding: 1.5rem;
 }
 
 .modal-body-modern button {
@@ -375,6 +321,36 @@ require_once 'includes/header.php';
     margin-bottom: 1rem;
     opacity: 0.5;
 }
+
+/* Edit mode toggle */
+.edit-mode-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.edit-mode-segment {
+    display: inline-flex;
+    background: #f3f4f6;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.edit-mode-btn {
+    border: none;
+    background: transparent;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    color: #374151;
+    font-weight: 600;
+}
+.edit-mode-btn.active {
+    background: #111827;
+    color: white;
+}
+
+/* Horizontal scroll for inline edit */
+.table-modern { overflow-x: auto; }
+.table-modern table { min-width: 960px; }
+.table-modern.inline-mode table { min-width: 1200px; }
 </style>
 
 <div class="content">
@@ -385,7 +361,28 @@ require_once 'includes/header.php';
                 <i class="fas fa-users"></i> Customers Management
             </h3>
             <div class="card-actions action-buttons">
-                <button class="btn btn-primary btn-sm" onclick="openAddModal()">
+                <!-- Export Dropdown -->
+                <div class="table-actions-dropdown" id="exportDropdown">
+                    <button class="btn btn-success btn-sm" onclick="toggleExportMenu()">
+                        <i class="fas fa-download"></i> Export <i class="fas fa-chevron-down" style="margin-left: 0.25rem; font-size: 0.75rem;"></i>
+                    </button>
+                    <div class="table-actions-menu" id="exportMenu" style="right: 0;">
+                        <button class="table-actions-menu-item" onclick="exportData('csv')">
+                            <i class="fas fa-file-csv"></i>
+                            <span>Export as CSV</span>
+                        </button>
+                        <button class="table-actions-menu-item" onclick="exportData('excel')">
+                            <i class="fas fa-file-excel"></i>
+                            <span>Export as Excel</span>
+                        </button>
+                        <button class="table-actions-menu-item" onclick="exportData('pdf')">
+                            <i class="fas fa-file-pdf"></i>
+                            <span>Export as PDF</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <button class="btn btn-primary btn-sm" onclick="openCustomerModal('add')">
                     <i class="fas fa-user-plus"></i> Add Customer
                 </button>
             </div>
@@ -428,7 +425,15 @@ require_once 'includes/header.php';
             <i class="fas fa-search"></i>
             <input type="text" id="searchInput" placeholder="Search customers by name, code, phone...">
         </div>
-        <div style="margin-left: auto; display: flex; gap: 0.75rem;"></div>
+        <div style="margin-left: auto; display: flex; gap: 0.75rem; align-items: center;">
+            <div class="edit-mode-toggle">
+                <span style="color:#6b7280; font-size:.875rem;">Edit Mode:</span>
+                <div class="edit-mode-segment" id="editModeSegment">
+                    <button type="button" class="edit-mode-btn" id="editModeModalBtn" data-mode="modal">Modal</button>
+                    <button type="button" class="edit-mode-btn" id="editModeInlineBtn" data-mode="inline">Inline</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Customers Table -->
@@ -458,15 +463,14 @@ require_once 'includes/header.php';
 </div>
 
 <!-- Add/Edit Modal -->
-<div class="modal-modern" id="customerModal" 
-     onclick="if(event.target.id==='customerModal'){closeModal();}">
-    <div class="modal-content-modern" id="modalContentWrapper" onclick="event.stopPropagation();">
+<div class="modal-modern" id="customerModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-content-modern" id="modalContentWrapper">
         <div class="modal-header-modern">
             <h3 style="margin: 0; font-weight: 700;">
                 <i class="fas fa-user-plus"></i> <span id="modalTitle">Add New Customer</span>
             </h3>
             <button type="button" id="modalCloseBtn" 
-                    onclick="closeModal()"
+                    data-close="modal"
                     style="background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer !important; pointer-events: auto !important; opacity: 0.9; transition: all 0.2s; padding: 0.5rem; position: relative; z-index: 10003;">
                 <i class="fas fa-times"></i>
             </button>
@@ -537,7 +541,7 @@ require_once 'includes/header.php';
 
                 <div style="display: flex; gap: 1rem; margin-top: 2rem; position: relative; z-index: 10001;">
                     <button type="button" id="modalCancelBtn" 
-                            onclick="closeModal()"
+                            data-close="modal"
                             class="btn-modern" style="flex: 1; background: #f3f4f6; color: #374151; cursor: pointer !important; pointer-events: auto !important; position: relative; z-index: 10002;">
                         <i class="fas fa-times"></i> Cancel
                     </button>
@@ -546,6 +550,28 @@ require_once 'includes/header.php';
                     </button>
                 </div>
             </form>
+</div>
+</div>
+</div>
+
+<div class="modal-modern" id="deleteConfirmModal" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+    <div class="modal-content-modern" onclick="event.stopPropagation();">
+        <div class="modal-header-modern">
+            <h3 id="deleteModalTitle" style="margin:0; font-weight:700;"><i class="fas fa-exclamation-triangle"></i> Confirm Delete</h3>
+            <button type="button" id="deleteCloseBtn" data-close="modal" style="background:none; border:none; color:white; font-size:1.2rem; cursor:pointer; opacity:0.9; padding:0.5rem; position:relative; z-index:10003;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body-modern">
+            <p id="deleteConfirmText" style="margin-bottom:1rem; color:#374151;">Are you sure you want to delete this customer?</p>
+            <div style="display:flex; gap:1rem;">
+                <button type="button" id="deleteCancelBtn" data-close="modal" class="btn-modern" style="flex:1; background:#f3f4f6; color:#374151;">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button type="button" id="deleteConfirmBtn" class="btn-modern btn-primary-modern" style="flex:1;">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -707,6 +733,9 @@ async function saveCustomer(event) {
     saveBtn.disabled = true;
     saveBtn.innerHTML = '<div class="loading-spinner"></div> Saving...';
 
+    // Close modal immediately on save
+    window.closeModal();
+
     try {
         const action = id ? `update&id=${id}` : 'create';
         const url = `${API_URL}&action=${action}`;
@@ -732,7 +761,6 @@ async function saveCustomer(event) {
 
         if (result.success) {
             showToast(id ? '✅ Customer updated successfully!' : '✅ Customer added successfully!', 'success');
-            closeModal();
             await loadCustomers();
             await loadStats();
         } else {
@@ -748,26 +776,14 @@ async function saveCustomer(event) {
 }
 
 async function deleteCustomer(id, name) {
-    if (!confirm(`Delete customer "${name}"?\n\nThis action cannot be undone.`)) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`${API_URL}&action=delete&id=${id}`, {
-            method: 'POST'
-        });
-        const result = await response.json();
-
-        if (result.success) {
-            showToast('Customer deleted!', 'success');
-            await loadCustomers();
-            await loadStats();
-        } else {
-            throw new Error(result.message || 'Delete failed');
-        }
-    } catch (error) {
-        console.error('❌ Delete error:', error);
-        showToast('Failed: ' + error.message, 'error');
+    pendingDeleteId = id;
+    pendingDeleteName = name || '';
+    const text = document.getElementById('deleteConfirmText');
+    if (text) { text.textContent = `Delete customer "${pendingDeleteName}"?`; }
+    const modal = document.getElementById('deleteConfirmModal');
+    if (modal) {
+        modal.classList.add('show');
+        document.body.style.overflow = 'hidden';
     }
 }
 
@@ -792,10 +808,12 @@ function renderCustomers() {
         return;
     }
 
+    const tableWrapper = document.querySelector('.table-modern');
+    if (tableWrapper) tableWrapper.classList.toggle('inline-mode', window.editMode === 'inline');
     tbody.innerHTML = filteredCustomers.map(c => {
         const escapedName = (c.name || '').replace(/'/g, "\\'");
         return `
-        <tr style="transition: all 0.2s;">
+        <tr style="transition: all 0.2s;" data-id="${c.id}">
             <td><strong style="color: #667eea;">${c.customer_code || '-'}</strong></td>
             <td><strong style="color: #1f2937;">${c.name || '-'}</strong></td>
             <td style="color: #4b5563;">${c.phone || '-'}</td>
@@ -808,10 +826,10 @@ function renderCustomers() {
                 </span>
             </td>
             <td style="text-align: center;">
-                <button class="action-btn action-btn-edit" onclick='editCustomer(${JSON.stringify(c).replace(/'/g, "\\'")})'  title="Edit Customer">
+                <button class="action-btn action-btn-edit" data-action="edit" data-id="${c.id}" title="Edit Customer">
                     <i class="fas fa-edit"></i>
                 </button>
-                <button class="action-btn action-btn-delete" onclick="deleteCustomer(${c.id}, '${escapedName}')" title="Delete Customer">
+                <button class="action-btn action-btn-delete" data-action="delete" data-id="${c.id}" data-name='${escapedName}' title="Delete Customer">
                     <i class="fas fa-trash"></i>
                 </button>
             </td>
@@ -819,68 +837,172 @@ function renderCustomers() {
     `;
     }).join('');
     
+    if (!tbody.__binded) {
+        tbody.addEventListener('click', function(e) {
+            const btn = e.target.closest('button[data-action]');
+            if (!btn) return;
+            const action = btn.getAttribute('data-action');
+            const id = parseInt(btn.getAttribute('data-id'), 10);
+            if (!id) return;
+            const row = btn.closest('tr');
+            if (action === 'edit') {
+                const cust = customers.find(x => parseInt(x.id,10) === id) || filteredCustomers.find(x => parseInt(x.id,10) === id);
+                if (!cust) return;
+                if (window.editMode === 'inline') {
+                    if (row) startInlineEdit(cust, row);
+                } else {
+                    openCustomerModal('edit', cust);
+                }
+            } else if (action === 'save-inline') {
+                if (row) { saveInlineCustomer(row); }
+            } else if (action === 'cancel-inline') {
+                if (row) { cancelInlineEdit(row); }
+            } else if (action === 'delete') {
+                const name = btn.getAttribute('data-name') || '';
+                deleteCustomer(id, name);
+            }
+        });
+        tbody.__binded = true;
+    }
     console.log(`✅ Rendered ${filteredCustomers.length} customers`);
 }
 
-function openAddModal() {
-    console.log('📝 Opening Add Modal...');
-    document.getElementById('modalTitle').textContent = 'Add New Customer';
-    document.getElementById('customerForm').reset();
-    document.getElementById('customerId').value = '';
-    document.getElementById('customerCode').value = 'CUST' + Date.now().toString().substr(-6);
-    document.getElementById('customerActive').checked = true;
-    
+function openCustomerModal(mode, customer) {
+    const titleEl = document.getElementById('modalTitle');
+    const form = document.getElementById('customerForm');
+    const idEl = document.getElementById('customerId');
+    const codeEl = document.getElementById('customerCode');
+    const nameEl = document.getElementById('customerName');
+    const emailEl = document.getElementById('customerEmail');
+    const phoneEl = document.getElementById('customerPhone');
+    const addrEl = document.getElementById('customerAddress');
+    const cityEl = document.getElementById('customerCity');
+    const postalEl = document.getElementById('customerPostalCode');
+    const activeEl = document.getElementById('customerActive');
+
+    if (mode === 'edit' && customer) {
+        titleEl.textContent = 'Edit Customer';
+        idEl.value = customer.id;
+        nameEl.value = customer.name || '';
+        codeEl.value = customer.customer_code || '';
+        emailEl.value = customer.email || '';
+        phoneEl.value = customer.phone || '';
+        addrEl.value = customer.address || '';
+        cityEl.value = customer.city || '';
+        postalEl.value = customer.postal_code || '';
+        activeEl.checked = customer.is_active == 1;
+    } else {
+        titleEl.textContent = 'Add New Customer';
+        form.reset();
+        idEl.value = '';
+        codeEl.value = 'CUST' + Date.now().toString().substr(-6);
+        activeEl.checked = true;
+    }
+
     const modal = document.getElementById('customerModal');
-    modal.hidden = false;
-    modal.classList.remove('closing');
+    const exportMenu = document.getElementById('exportMenu');
+    if (exportMenu) { exportMenu.classList.remove('show'); }
     modal.classList.add('show');
-    console.log('✅ Modal opened');
+    document.body.style.overflow = 'hidden';
+    const firstInput = document.getElementById('customerName');
+    if (firstInput) firstInput.focus();
 }
 
-function editCustomer(customer) {
-    console.log('✏️ Opening Edit Modal for:', customer.name);
-    document.getElementById('modalTitle').textContent = 'Edit Customer';
-    document.getElementById('customerId').value = customer.id;
-    document.getElementById('customerName').value = customer.name;
-    document.getElementById('customerCode').value = customer.customer_code;
-    document.getElementById('customerEmail').value = customer.email || '';
-    document.getElementById('customerPhone').value = customer.phone || '';
-    document.getElementById('customerAddress').value = customer.address || '';
-    document.getElementById('customerCity').value = customer.city || '';
-    document.getElementById('customerPostalCode').value = customer.postal_code || '';
-    document.getElementById('customerActive').checked = customer.is_active == 1;
-    
-    const modal = document.getElementById('customerModal');
-    modal.hidden = false;
-    modal.classList.remove('closing');
-    modal.classList.add('show');
-    console.log('✅ Edit modal opened');
+function startInlineEdit(customer, row) {
+    row.__originalHTML = row.innerHTML;
+    const activeChecked = customer.is_active ? 'checked' : '';
+    row.innerHTML = `
+        <td><strong style="color:#667eea;">${customer.customer_code || '-'}</strong></td>
+        <td><input type="text" class="form-input-modern" style="min-width:150px" name="name" value="${customer.name || ''}"></td>
+        <td><input type="tel" class="form-input-modern" style="min-width:130px" name="phone" value="${customer.phone || ''}"></td>
+        <td><input type="email" class="form-input-modern" style="min-width:160px" name="email" value="${customer.email || ''}"></td>
+        <td><input type="text" class="form-input-modern" style="min-width:120px" name="city" value="${customer.city || ''}"></td>
+        <td style="text-align:center"><label style="display:inline-flex;align-items:center;gap:.5rem"><input type="checkbox" name="is_active" ${activeChecked}> Active</label></td>
+        <td style="text-align:center">
+            <button class="action-btn" style="background:#d1fae5;color:#065f46" data-action="save-inline" data-id="${customer.id}"><i class="fas fa-save"></i></button>
+            <button class="action-btn" style="background:#f3f4f6;color:#374151" data-action="cancel-inline" data-id="${customer.id}"><i class="fas fa-times"></i></button>
+        </td>
+    `;
+    row.classList.add('editing');
+}
+
+async function saveInlineCustomer(row) {
+    const id = parseInt(row.getAttribute('data-id'), 10);
+    const name = row.querySelector('input[name="name"]').value.trim();
+    const phone = row.querySelector('input[name="phone"]').value.trim();
+    const email = row.querySelector('input[name="email"]').value.trim();
+    const city = row.querySelector('input[name="city"]').value.trim();
+    const is_active = row.querySelector('input[name="is_active"]').checked ? 1 : 0;
+    const payload = { name, phone, email, city, is_active };
+    try {
+        const response = await fetch(`${API_URL}&action=update&id=${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const result = await response.json();
+        if (result.success) {
+            showToast('Customer updated', 'success');
+            await loadCustomers();
+        } else {
+            showToast(result.message || 'Update failed', 'error');
+        }
+    } catch (err) {
+        showToast('Network error', 'error');
+    }
+}
+
+function cancelInlineEdit(row) {
+    if (row.__originalHTML) {
+        row.innerHTML = row.__originalHTML;
+        row.classList.remove('editing');
+    } else {
+        renderCustomers();
+    }
 }
 
 // Make closeModal available globally
 window.closeModal = function() {
+    const modal = document.getElementById('customerModal');
+    if (!modal) return;
+    modal.classList.remove('show');
+    document.body.style.overflow = '';
+    const form = document.getElementById('customerForm');
+    if (form) form.reset();
+    const customerIdEl = document.getElementById('customerId');
+    if (customerIdEl) customerIdEl.value = '';
+    const saveBtn = document.getElementById('saveBtn');
+    if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Customer';
+    }
+}
+
+let pendingDeleteId = null;
+let pendingDeleteName = '';
+
+function closeDeleteConfirm() {
+    const modal = document.getElementById('deleteConfirmModal');
+    if (!modal) return;
+    modal.classList.remove('show');
+    document.body.style.overflow = '';
+}
+
+async function performDelete() {
+    if (!pendingDeleteId) return;
     try {
-        const modal = document.getElementById('customerModal');
-        if (!modal) return;
-        modal.classList.remove('show');
-        modal.classList.add('closing');
-        modal.hidden = true;
-        modal.style.display = 'none';
-        setTimeout(() => {
-            modal.classList.remove('show', 'closing');
-            const form = document.getElementById('customerForm');
-            if (form) form.reset();
-            const customerIdEl = document.getElementById('customerId');
-            if (customerIdEl) customerIdEl.value = '';
-            const saveBtn = document.getElementById('saveBtn');
-            if (saveBtn) {
-                saveBtn.disabled = false;
-                saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Customer';
-            }
-            document.body.style.overflow = '';
-        }, 200);
+        const response = await fetch(`${API_URL}&action=delete&id=${pendingDeleteId}`, { method: 'POST' });
+        const result = await response.json();
+        if (result.success) {
+            showToast('Customer deleted!', 'success');
+            closeDeleteConfirm();
+            await loadCustomers();
+            await loadStats();
+        } else {
+            throw new Error(result.message || 'Delete failed');
+        }
     } catch (error) {
-        console.error(error);
+        console.error('❌ Delete error:', error);
+        showToast('Failed: ' + error.message, 'error');
+    } finally {
+        pendingDeleteId = null;
+        pendingDeleteName = '';
     }
 }
 
@@ -930,123 +1052,43 @@ document.addEventListener('DOMContentLoaded', function() {
     if (searchInput) {
         searchInput.addEventListener('input', searchCustomers);
     }
+    window.editMode = localStorage.getItem('customersEditMode') || 'modal';
+    function applyEditModeUI() {
+        const modalBtn = document.getElementById('editModeModalBtn');
+        const inlineBtn = document.getElementById('editModeInlineBtn');
+        modalBtn && modalBtn.classList.toggle('active', window.editMode === 'modal');
+        inlineBtn && inlineBtn.classList.toggle('active', window.editMode === 'inline');
+        const tableWrapper = document.querySelector('.table-modern');
+        tableWrapper && tableWrapper.classList.toggle('inline-mode', window.editMode === 'inline');
+    }
+    applyEditModeUI();
+    const modalBtn = document.getElementById('editModeModalBtn');
+    const inlineBtn = document.getElementById('editModeInlineBtn');
+    modalBtn && modalBtn.addEventListener('click', () => { window.editMode = 'modal'; localStorage.setItem('customersEditMode', 'modal'); applyEditModeUI(); });
+    inlineBtn && inlineBtn.addEventListener('click', () => { window.editMode = 'inline'; localStorage.setItem('customersEditMode', 'inline'); applyEditModeUI(); });
     
     // ===========================================================================
     // MODAL CLOSE HANDLERS - MULTIPLE LAYERS FOR RELIABILITY
     // ===========================================================================
     
     // 1. Close button (X) - HIGHEST PRIORITY WITH DEBOUNCE
-    let closeDebounce = null;
     const modalCloseBtn = document.getElementById('modalCloseBtn');
-    if (modalCloseBtn) {
-        console.log('✅ Found close button (X)');
-        
-        const handleClose = function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation(); // Stop ALL other handlers
-            
-            console.log('🔴 Close button (X) EVENT TRIGGERED!');
-            
-            // Debounce to prevent multiple calls
-            if (closeDebounce) {
-                console.log('⏸️ Debouncing - skipping duplicate call');
-                return false;
-            }
-            
-            closeDebounce = setTimeout(() => {
-                closeDebounce = null;
-            }, 500);
-            
-            // Call close
-            console.log('▶️ Calling closeModal NOW...');
-            window.closeModal();
-            
-            return false;
-        };
-        
-        // Click handler with capture
-        modalCloseBtn.addEventListener('click', handleClose, true);
-        
-        // Prevent default on all events
-        modalCloseBtn.addEventListener('mousedown', function(e) {
-            e.preventDefault();
-            console.log('🔴 Close button (X) MOUSEDOWN!');
-        }, true);
-        
-    } else {
-        console.error('❌ Close button NOT FOUND!');
-    }
+    if (modalCloseBtn) modalCloseBtn.addEventListener('click', () => window.closeModal());
     
     // 2. Cancel button - HIGHEST PRIORITY WITH DEBOUNCE
-    let cancelDebounce = null;
     const modalCancelBtn = document.getElementById('modalCancelBtn');
-    if (modalCancelBtn) {
-        console.log('✅ Found cancel button');
-        
-        const handleCancel = function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation(); // Stop ALL other handlers
-            
-            console.log('🔴 Cancel button EVENT TRIGGERED!');
-            
-            // Debounce
-            if (cancelDebounce) {
-                console.log('⏸️ Debouncing - skipping duplicate call');
-                return false;
-            }
-            
-            cancelDebounce = setTimeout(() => {
-                cancelDebounce = null;
-            }, 500);
-            
-            // Call close
-            console.log('▶️ Calling closeModal NOW...');
-            window.closeModal();
-            
-            return false;
-        };
-        
-        // Click handler with capture
-        modalCancelBtn.addEventListener('click', handleCancel, true);
-        
-        // Prevent default on mousedown
-        modalCancelBtn.addEventListener('mousedown', function(e) {
-            e.preventDefault();
-            console.log('🔴 Cancel button MOUSEDOWN!');
-        }, true);
-        
-    } else {
-        console.error('❌ Cancel button NOT FOUND!');
-    }
+    if (modalCancelBtn) modalCancelBtn.addEventListener('click', () => window.closeModal());
     
     // 3. ESC key
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            console.log('🔴 ESC key pressed');
-            window.closeModal();
-        }
-    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { window.closeModal(); closeDeleteConfirm(); } });
     
     // 4. Backdrop click
     const modal = document.getElementById('customerModal');
-    if (modal) {
-        modal.addEventListener('click', function(e) {
-            if (e.target.id === 'customerModal') {
-                console.log('🔴 Backdrop clicked');
-                window.closeModal();
-            }
-        });
-    }
+    if (modal) modal.addEventListener('click', (e) => { if (e.target.id === 'customerModal') window.closeModal(); });
     
     // 5. Prevent modal content click from closing
     const modalContent = document.getElementById('modalContentWrapper');
-    if (modalContent) {
-        modalContent.addEventListener('click', function(e) {
-            e.stopPropagation();
-        });
-    }
+    if (modalContent) modalContent.addEventListener('click', (e) => e.stopPropagation());
     
     console.log('✅ All event listeners attached!');
     console.log('✅ Ready to test - Try clicking buttons!');
@@ -1060,7 +1102,77 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Modal exists:', !!document.getElementById('customerModal'));
         console.log('='.repeat(50));
     }, 1000);
+
+    const delCancel = document.getElementById('deleteCancelBtn');
+    const delConfirm = document.getElementById('deleteConfirmBtn');
+    if (delCancel) delCancel.addEventListener('click', () => closeDeleteConfirm());
+    if (delConfirm) delConfirm.addEventListener('click', () => performDelete());
+    const deleteOverlay = document.getElementById('deleteConfirmModal');
+    if (deleteOverlay) deleteOverlay.addEventListener('click', (e) => { if (e.target.id === 'deleteConfirmModal') closeDeleteConfirm(); });
+    const deleteContent = document.querySelector('#deleteConfirmModal .modal-content-modern');
+    if (deleteContent) deleteContent.addEventListener('click', (e) => e.stopPropagation());
+    const deleteCloseBtn = document.getElementById('deleteCloseBtn');
+    if (deleteCloseBtn) deleteCloseBtn.addEventListener('click', () => closeDeleteConfirm());
 });
+
+// Export functionality
+function toggleExportMenu() {
+    const menu = document.getElementById('exportMenu');
+    if (menu) {
+        menu.classList.toggle('show');
+    }
+}
+
+function exportData(format) {
+    document.getElementById('exportMenu').classList.remove('show');
+    
+    const searchInput = document.getElementById('searchInput');
+    const searchQuery = searchInput ? searchInput.value : '';
+    
+    showToast(`Exporting customers as ${format.toUpperCase()}...`, 'info');
+    
+    // Build export URL with search filter
+    let exportUrl = `../api.php?controller=customer&action=export&format=${format}`;
+    
+    // Add search query if active
+    if (searchQuery) {
+        exportUrl += `&search=${encodeURIComponent(searchQuery)}`;
+    }
+    
+    console.log('Export URL:', exportUrl);
+    
+    // Trigger download
+    setTimeout(() => {
+        window.location.href = exportUrl;
+    }, 500);
+}
+
+// Close export menu when clicking outside
+document.addEventListener('click', function(e) {
+    const exportDropdown = document.getElementById('exportDropdown');
+    const exportMenu = document.getElementById('exportMenu');
+    
+    if (exportDropdown && exportMenu) {
+        if (!exportDropdown.contains(e.target)) {
+            exportMenu.classList.remove('show');
+        }
+    }
+});
+
+// Global safety: ensure modal close buttons always work even if other overlays exist
+document.addEventListener('click', function(e) {
+    const closeBtn = e.target.closest('#modalCloseBtn');
+    const cancelBtn = e.target.closest('#modalCancelBtn');
+    const dataClose = e.target.closest('[data-close="modal"]');
+    if (closeBtn || cancelBtn || dataClose) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof window.closeModal === 'function') {
+            window.closeModal();
+        }
+    }
+}, true);
+
 </script>
 
 <?php require_once 'includes/footer.php'; ?>

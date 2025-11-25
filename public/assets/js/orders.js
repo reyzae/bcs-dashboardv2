@@ -61,6 +61,33 @@ class OrdersPage {
                 app.showToast('Orders refreshed', 'info');
             });
         }
+
+        // Export dropdown
+        const exportMenuBtn = document.getElementById('exportMenuBtn');
+        const exportMenu = document.getElementById('exportMenu');
+        
+        if (exportMenuBtn && exportMenu) {
+            exportMenuBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                exportMenu.classList.toggle('show');
+            });
+            
+            // Close export menu when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!exportMenuBtn.contains(e.target) && !exportMenu.contains(e.target)) {
+                    exportMenu.classList.remove('show');
+                }
+            });
+            
+            // Export menu items
+            exportMenu.querySelectorAll('.dropdown-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const format = item.getAttribute('data-format');
+                    this.exportData(format);
+                });
+            });
+        }
     }
 
     startPolling() {
@@ -102,7 +129,35 @@ class OrdersPage {
             tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding: 1rem; color: #6b7280;">Memuat pesanan...</td></tr>`;
         }
         try {
-            const resp = await app.apiCall(`../api.php?controller=order&action=list&status=${status}&limit=50`);
+            let url = `../api.php?controller=order&action=list&status=${status}&limit=50`;
+            const q = document.getElementById('orderSearchInput');
+            if (q && q.value) { url += `&search=${encodeURIComponent(q.value)}`; }
+            const dq = document.getElementById('orderDateQuick');
+            if (dq && dq.value) {
+                if (dq.value === 'custom') {
+                    const df = document.getElementById('orderDateFrom');
+                    const dt = document.getElementById('orderDateTo');
+                    if (df && df.value) { url += `&date_from=${encodeURIComponent(df.value)}`; }
+                    if (dt && dt.value) { url += `&date_to=${encodeURIComponent(dt.value)}`; }
+                } else {
+                    const now = new Date();
+                    let dateFrom, dateTo;
+                    if (dq.value === 'today') {
+                        dateFrom = dateTo = now.toISOString().split('T')[0];
+                    } else if (dq.value === 'yesterday') {
+                        const y = new Date(now); y.setDate(y.getDate() - 1);
+                        dateFrom = dateTo = y.toISOString().split('T')[0];
+                    } else if (dq.value === 'week') {
+                        const w = new Date(now.getTime() - 7*24*60*60*1000);
+                        dateFrom = w.toISOString().split('T')[0]; dateTo = now.toISOString().split('T')[0];
+                    } else if (dq.value === 'month') {
+                        const m = new Date(now.getTime() - 30*24*60*60*1000);
+                        dateFrom = m.toISOString().split('T')[0]; dateTo = now.toISOString().split('T')[0];
+                    }
+                    if (dateFrom && dateTo) { url += `&date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}`; }
+                }
+            }
+            const resp = await app.apiCall(url);
             if (resp.success) {
                 this.renderTable(resp.data.orders || []);
             } else {
@@ -292,6 +347,40 @@ class OrdersPage {
                 buttonEl.innerHTML = '<i class="fas fa-check" style="color:#10b981"></i> Payment Accepted';
             }
         }
+    }
+
+    async exportData(format) {
+        const exportMenu = document.getElementById('exportMenu');
+        if (exportMenu) { exportMenu.classList.remove('show'); }
+        let url = `../api.php?controller=order&action=export&format=${format}&status=${this.activeStatus}`;
+        const q = document.getElementById('orderSearchInput');
+        if (q && q.value) { url += `&search=${encodeURIComponent(q.value)}`; }
+        const dq = document.getElementById('orderDateQuick');
+        if (dq && dq.value) {
+            if (dq.value === 'custom') {
+                const df = document.getElementById('orderDateFrom');
+                const dt = document.getElementById('orderDateTo');
+                if (df && df.value) { url += `&date_from=${encodeURIComponent(df.value)}`; }
+                if (dt && dt.value) { url += `&date_to=${encodeURIComponent(dt.value)}`; }
+            } else {
+                const now = new Date();
+                let dateFrom, dateTo;
+                if (dq.value === 'today') {
+                    dateFrom = dateTo = now.toISOString().split('T')[0];
+                } else if (dq.value === 'yesterday') {
+                    const y = new Date(now); y.setDate(y.getDate() - 1);
+                    dateFrom = dateTo = y.toISOString().split('T')[0];
+                } else if (dq.value === 'week') {
+                    const w = new Date(now.getTime() - 7*24*60*60*1000);
+                    dateFrom = w.toISOString().split('T')[0]; dateTo = now.toISOString().split('T')[0];
+                } else if (dq.value === 'month') {
+                    const m = new Date(now.getTime() - 30*24*60*60*1000);
+                    dateFrom = m.toISOString().split('T')[0]; dateTo = now.toISOString().split('T')[0];
+                }
+                if (dateFrom && dateTo) { url += `&date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}`; }
+            }
+        }
+        if (window && window.location) { window.location.href = url; }
     }
 }
 

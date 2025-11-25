@@ -547,6 +547,29 @@ $dashboard_title = getDashboardTitle();
             }
         }
     </style>
+    <script>
+    // Apply branding from settings on load
+    (function(){
+        window.addEventListener('DOMContentLoaded', function(){
+            fetch('../api.php?controller=settings&action=get')
+                .then(r => r.json())
+                .then(res => {
+                    if (!res || !res.success || !res.data) return;
+                    const s = res.data;
+                    if (s.brand_primary_color) {
+                        document.documentElement.style.setProperty('--primary-color', s.brand_primary_color);
+                        const meta = document.querySelector('meta[name="theme-color"]');
+                        if (meta) meta.setAttribute('content', s.brand_primary_color);
+                    }
+                    if (s.brand_logo) {
+                        const img = document.querySelector('.sidebar-logo .logo-img');
+                        if (img) img.src = '../' + s.brand_logo;
+                    }
+                })
+                .catch(()=>{});
+        });
+    })();
+    </script>
 </head>
 <body>
     <a href="#main" class="skip-link">Skip to content</a>

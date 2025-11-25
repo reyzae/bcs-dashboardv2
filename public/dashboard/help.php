@@ -1002,12 +1002,12 @@ include __DIR__ . '/includes/header.php';
                 <span>Email Support</span>
             </a>
             
-            <a href="https://wa.me/6281234567890" class="contact-btn" target="_blank">
+            <a id="supportWhatsApp" href="#" class="contact-btn" target="_blank">
                 <i class="fab fa-whatsapp"></i>
                 <span>WhatsApp</span>
             </a>
             
-            <a href="tel:+6281234567890" class="contact-btn">
+            <a id="supportCall" href="#" class="contact-btn">
                 <i class="fas fa-phone"></i>
                 <span>Call Us</span>
             </a>
@@ -1133,6 +1133,27 @@ document.addEventListener('keydown', (e) => {
 
 console.log('✅ Help Center loaded successfully');
 console.log('💡 Pro tip: Use Ctrl+/ to quickly access this help page from anywhere');
+</script>
+
+<script>
+// Inject support phone from settings
+(function(){
+    const wa = document.getElementById('supportWhatsApp');
+    const call = document.getElementById('supportCall');
+    if (!wa && !call) return;
+    fetch('../api.php?controller=settings&action=get&key=company_phone')
+        .then(r => r.json())
+        .then(res => {
+            const phone = (res && res.success && res.data && res.data.value) ? res.data.value : '+6285121010199';
+            const normalized = String(phone).replace(/[^0-9]/g,'');
+            if (wa) wa.href = `https://wa.me/${normalized}`;
+            if (call) call.href = `tel:+${normalized}`;
+        })
+        .catch(() => {
+            if (wa) wa.href = 'https://wa.me/6285121010199';
+            if (call) call.href = 'tel:+6285121010199';
+        });
+})();
 </script>
 
 <?php

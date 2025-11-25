@@ -27,7 +27,7 @@
                         <a href="#" class="footer-link" onclick="showAboutModal(); return false;" title="About System">
                             <i class="fas fa-info-circle"></i> About
                         </a>
-                        <a href="https://wa.me/6281234567890" target="_blank" class="footer-link" title="Contact Support">
+                        <a id="supportLink" href="#" target="_blank" class="footer-link" title="Contact Support">
                             <i class="fas fa-headset"></i> Support
                         </a>
                     </div>
@@ -107,6 +107,24 @@
     })();
     </script>
 
+    <script>
+    // Dynamically set support WhatsApp link from settings
+    (function(){
+        const el = document.getElementById('supportLink');
+        if (!el) return;
+        fetch('../api.php?controller=settings&action=get&key=company_phone')
+            .then(r => r.json())
+            .then(res => {
+                const phone = (res && res.success && res.data && res.data.value) ? res.data.value : '+6285121010199';
+                const normalized = String(phone).replace(/[^0-9]/g,'');
+                el.href = `https://wa.me/${normalized}`;
+            })
+            .catch(() => {
+                el.href = 'https://wa.me/6285121010199';
+            });
+    })();
+    </script>
+
     <!-- Keyboard Shortcuts Modal -->
     <div class="modal" id="shortcutsModal" style="display: none;">
         <div class="modal-dialog">
@@ -142,6 +160,27 @@
                     <button type="button" class="btn btn-secondary" onclick="closeModal('shortcutsModal')">
                         Close
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logout Confirmation Modal -->
+    <div class="modal" id="logoutConfirmModal" style="display: none;">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title"><i class="fas fa-sign-out-alt"></i> Konfirmasi Logout</h3>
+                    <button type="button" class="modal-close" onclick="closeModal('logoutConfirmModal')">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p>Apakah Anda yakin ingin keluar dari akun?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="logoutCancelBtn">Batal</button>
+                    <button type="button" class="btn btn-primary" id="logoutConfirmBtn"><i class="fas fa-check"></i> Logout</button>
                 </div>
             </div>
         </div>
@@ -456,6 +495,27 @@
             console.error('Error marking all as read:', error);
         }
     });
+    </script>
+
+    <script>
+    // Logout confirmation binding for all roles
+    (function(){
+        const btn = document.getElementById('logoutBtn');
+        const modalId = 'logoutConfirmModal';
+        const cancelBtn = document.getElementById('logoutCancelBtn');
+        const confirmBtn = document.getElementById('logoutConfirmBtn');
+        function openModal(id){ const m=document.getElementById(id); if(!m) return; m.style.display='block'; m.classList.add('show'); }
+        function closeModalLocal(id){ const m=document.getElementById(id); if(!m) return; m.classList.remove('show'); setTimeout(()=>{ m.style.display='none'; },200); }
+        if (btn) {
+            btn.addEventListener('click', function(e){ e.preventDefault(); openModal(modalId); });
+        }
+        if (cancelBtn) { cancelBtn.addEventListener('click', function(){ closeModalLocal(modalId); }); }
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', function(){ window.location.href = 'logout.php'; });
+        }
+        // Esc to close
+        document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeModalLocal(modalId); });
+    })();
     </script>
 
     <!-- About Modal -->

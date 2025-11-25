@@ -59,6 +59,14 @@ class ExportHelper {
      * @return string File path
      */
     public static function exportToExcel($data, $filename, $headers = [], $sheetName = 'Report') {
+        if (PHP_VERSION_ID < 80200) {
+            $csvFilename = preg_replace('/\.(xlsx?|xls)$/i', '.csv', $filename);
+            if ($csvFilename === $filename) {
+                $csvFilename = pathinfo($filename, PATHINFO_FILENAME) . '.csv';
+            }
+            error_log('PhpSpreadsheet requires PHP >= 8.2; falling back to CSV');
+            return self::exportToCSV($data, $csvFilename, $headers);
+        }
         // Try to load autoload.php first
         $autoloadPaths = [
             __DIR__ . '/../../vendor/autoload.php',
@@ -88,6 +96,8 @@ class ExportHelper {
         }
         
         try {
+            $baseName = pathinfo($filename, PATHINFO_FILENAME);
+            $filename = $baseName . '.xlsx';
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
             $sheet->setTitle($sheetName);
@@ -119,21 +129,97 @@ class ExportHelper {
                 }
             }
             
-            // Set data
             $row = 2;
+            $colCount = count($headers);
+            $sums = array_fill(0, $colCount, null);
+
+            $lowerHeaders = array_map(function($h){ return strtolower(trim($h)); }, $headers);
+            $isTextCol = array_map(function($h){
+                return (strpos($h, 'number') !== false) || (strpos($h, 'code') !== false) || (strpos($h, 'sku') !== false) || (strpos($h, 'barcode') !== false) || (strpos($h, 'phone') !== false);
+            }, $lowerHeaders);
+            $isNumericCol = array_map(function($h){
+                return (strpos($h, 'amount') !== false) || (strpos($h, 'subtotal') !== false) || (strpos($h, 'discount') !== false) || (strpos($h, 'tax') !== false) || (strpos($h, 'shipping') !== false) || (strpos($h, 'revenue') !== false) || (strpos($h, 'profit') !== false) || (strpos($h, 'price') !== false) || (strpos($h, 'cost') !== false) || (strpos($h, 'total spent') !== false) || (strpos($h, 'stock quantity') !== false) || (strpos($h, 'items count') !== false);
+            }, $lowerHeaders);
+            $isCurrencyCol = array_map(function($h){
+                return (strpos($h, 'amount') !== false) || (strpos($h, 'subtotal') !== false) || (strpos($h, 'discount') !== false) || (strpos($h, 'tax') !== false) || (strpos($h, 'shipping') !== false) || (strpos($h, 'revenue') !== false) || (strpos($h, 'profit') !== false) || (strpos($h, 'price') !== false) || (strpos($h, 'cost') !== false) || (strpos($h, 'total spent') !== false);
+            }, $lowerHeaders);
+            $isDateCol = array_map(function($h){
+                return (strpos($h, 'date') !== false) || (strpos($h, 'paid at') !== false) || (strpos($h, 'created at') !== false) || (strpos($h, 'order date') !== false) || (strpos($h, 'last purchase') !== false);
+            }, $lowerHeaders);
+
             foreach ($data as $item) {
                 $col = 'A';
-                foreach ($item as $value) {
-                    $sheet->setCellValue($col . $row, $value);
+                for ($i = 0; $i < $colCount; $i++) {
+                    $value = $item[$i] ?? '';
+                    if (!empty($isTextCol[$i]) && $isTextCol[$i]) {
+                        $sheet->setCellValueExplicit($col . $row, (string)$value, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    } elseif (!empty($isDateCol[$i]) && $isDateCol[$i]) {
+                        $ts = is_string($value) ? strtotime($value) : null;
+                        if ($ts) {
+                            $excelDate = \PhpOffice\PhpSpreadsheet\Shared\Date::PHPToExcel($ts);
+                            $sheet->setCellValue($col . $row, $excelDate);
+                            $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('dd/mm/yyyy hh:mm');
+                        } else {
+                            $sheet->setCellValue($col . $row, $value);
+                        }
+                    } elseif ((!empty($isCurrencyCol[$i]) && $isCurrencyCol[$i]) || (!empty($isNumericCol[$i]) && $isNumericCol[$i])) {
+                        $numVal = self::toNumber($value);
+                        if ($numVal !== null) {
+                            $sheet->setCellValue($col . $row, $numVal);
+                        } else {
+                            $sheet->setCellValue($col . $row, $value);
+                        }
+                    } else {
+                        $sheet->setCellValue($col . $row, $value);
+                    }
+                    $num = self::toNumber($value);
+                    if ($num !== null && !empty($isNumericCol[$i]) && $isNumericCol[$i]) {
+                        $sums[$i] = ($sums[$i] ?? 0) + $num;
+                    }
                     $col++;
                 }
                 $row++;
             }
+
+            if ($row > 2 && $colCount > 0) {
+                $sheet->setCellValue('A' . $row, 'TOTAL');
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $col = 'B';
+                for ($i = 1; $i < $colCount; $i++) {
+                    $sum = $sums[$i];
+                    if ($sum !== null && !empty($isNumericCol[$i]) && $isNumericCol[$i]) {
+                        $sheet->setCellValue($col . $row, $sum);
+                    } else {
+                        $sheet->setCellValue($col . $row, '');
+                    }
+                    $col++;
+                }
+                $lastColTotal = chr(65 + $colCount - 1) . $row;
+                $sheet->getStyle('A' . $row . ':' . $lastColTotal)->applyFromArray([
+                    'font' => ['bold' => true],
+                    'fill' => [
+                        'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                        'startColor' => ['rgb' => 'EDEDED']
+                    ]
+                ]);
+            }
             
-            // Auto-size columns
+            // Auto-size columns & apply number formats
             $lastCol = chr(65 + count($headers) - 1);
             foreach (range('A', $lastCol) as $columnID) {
                 $sheet->getColumnDimension($columnID)->setAutoSize(true);
+            }
+
+            $colIdx = 0;
+            foreach (range('A', $lastCol) as $columnID) {
+                if (!empty($isTextCol[$colIdx]) && $isTextCol[$colIdx]) {
+                    $sheet->getStyle($columnID . '2:' . $columnID . ($row))->getNumberFormat()->setFormatCode('@');
+                } elseif (!empty($isCurrencyCol[$colIdx]) && $isCurrencyCol[$colIdx]) {
+                    $sheet->getStyle($columnID . '2:' . $columnID . ($row))->getNumberFormat()->setFormatCode('"Rp" #,##0');
+                } elseif (!empty($isNumericCol[$colIdx]) && $isNumericCol[$colIdx]) {
+                    $sheet->getStyle($columnID . '2:' . $columnID . ($row))->getNumberFormat()->setFormatCode('#,##0');
+                }
+                $colIdx++;
             }
             
             // Add borders to data
@@ -147,6 +233,10 @@ class ExportHelper {
                     ]
                 ]);
             }
+
+            // Freeze header row and apply autofilter
+            $sheet->freezePane('A2');
+            $sheet->setAutoFilter('A1:' . $lastCol . ($row - 1));
             
             // Generate file
             $exportDir = self::ensureExportDir();
@@ -165,6 +255,22 @@ class ExportHelper {
             }
             return self::exportToCSV($data, $csvFilename, $headers);
         }
+    }
+
+    private static function toNumber($value) {
+        if (is_int($value) || is_float($value)) { return (float)$value; }
+        if (!is_string($value)) { return null; }
+        $t = trim($value);
+        if ($t === '') { return null; }
+        if (preg_match('/^Rp\s*/i', $t)) {
+            $t = preg_replace('/[^0-9,\.]/', '', $t);
+            $t = str_replace('.', '', $t);
+            $t = str_replace(',', '.', $t);
+            return is_numeric($t) ? (float)$t : null;
+        }
+        $n = preg_replace('/[^0-9,\.\-]/', '', $t);
+        $n = str_replace(',', '.', $n);
+        return is_numeric($n) ? (float)$n : null;
     }
     
     /**

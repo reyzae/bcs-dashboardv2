@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS `products` (
   `price` decimal(12,2) NOT NULL,
   `cost_price` decimal(12,2) DEFAULT NULL,
   `stock_quantity` int(11) NOT NULL DEFAULT 0,
-  `min_stock_level` int(11) NOT NULL DEFAULT 5,
+  `min_stock_level` int(11) NOT NULL DEFAULT 1,
   `reorder_point` int(11) DEFAULT NULL COMMENT 'Auto reorder when stock below this',
   `max_stock_level` int(11) DEFAULT NULL,
   `unit` varchar(20) DEFAULT 'pcs',
@@ -688,7 +688,109 @@ COMMIT;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
-
 -- ========================================
 -- END OF DATABASE SCHEMA
 -- ========================================
+
+-- Migration: Add 'card' to orders.payment_method enum
+-- Safe to run multiple times; only applies if column exists.
+
+-- Check table exists
+ALTER TABLE `orders`
+  MODIFY COLUMN `payment_method` ENUM('qris','transfer','cod','card') NOT NULL DEFAULT 'qris';
+
+-- Migration: Disable Virtual Account usage by default for bank transfers
+-- Safe upsert into `settings` table
+
+START TRANSACTION;
+
+INSERT INTO `settings` (`key`, `value`, `type`, `description`) VALUES
+  ('transfer_use_va', '0', 'boolean', 'Use virtual account for bank transfer (0=disabled,1=enabled)')
+ON DUPLICATE KEY UPDATE
+  `value` = VALUES(`value`),
+  `type` = VALUES(`type`),
+  `description` = VALUES(`description`);
+
+COMMIT;
+
+-- Migration: Upsert QRIS static and BCA bank settings
+-- Safe to run multiple times; requires `settings` table with UNIQUE `key`
+
+START TRANSACTION;
+
+-- Upsert records
+INSERT INTO `settings` (`key`, `value`, `type`, `description`) VALUES
+  ('bank_bca_name', 'REYZA WIRAKUSUMA', 'string', 'Default BCA account holder name'),
+  ('bank_bca_account', '1481899929', 'string', 'Default BCA account number'),
+  ('bank_default', 'bca', 'string', 'Default bank for transfer payments'),
+  ('qris_static_enabled', '1', 'boolean', 'Enable static QRIS image for payments'),
+  ('qris_static_image_url', '/assets/img/qris-gopay.svg', 'string', 'Static QRIS image path displayed to customers')
+ON DUPLICATE KEY UPDATE 
+  `value` = VALUES(`value`),
+  `type` = VALUES(`type`),
+  `description` = VALUES(`description`);
+
+COMMIT;
+
+-- ========================================
+-- BYTEBALOK DASHBOARD - RELEASE SETUP for `wiracent_balok`
+-- Purpose:
+--   - Consolidated settings for bank transfer (BCA), static QRIS, and disabling Virtual Account (VA)
+--   - Idempotent: safe to run multiple times (ON DUPLICATE KEY UPDATE)
+-- Requirements:
+--   - Table `settings` must exist (see `database.sql`)
+--   - Update `qris_static_image_url` to match your actual QR image filename under `/public/assets/img`
+-- Usage:
+--   mysql -u <db_user> -p -h localhost wiracent_balok < release-setup-wiracent_balok.sql
+-- After:
+--   Verify via: SELECT `key`, `value` FROM settings WHERE `key` IN ('bank_default','bank_bca_name','bank_bca_account','transfer_use_va','qris_static_enabled','qris_static_image_url');
+
+START TRANSACTION;
+
+-- Default transfer bank: BCA
+INSERT INTO `settings` (`key`, `value`, `type`, `description`)
+VALUES
+    ('bank_default', 'bca', 'string', 'Default bank for transfer payments')
+ON DUPLICATE KEY UPDATE
+    `value` = VALUES(`value`),
+    `type` = VALUES(`type`),
+    `description` = VALUES(`description`);
+
+-- BCA account holder name
+INSERT INTO `settings` (`key`, `value`, `type`, `description`)
+VALUES
+    ('bank_bca_name', 'REYZA WIRAKUSUMA', 'string', 'Default BCA account holder name')
+ON DUPLICATE KEY UPDATE
+    `value` = VALUES(`value`),
+    `type` = VALUES(`type`),
+    `description` = VALUES(`description`);
+
+-- BCA account number
+INSERT INTO `settings` (`key`, `value`, `type`, `description`)
+VALUES
+    ('bank_bca_account', '1481899929', 'string', 'Default BCA account number')
+ON DUPLICATE KEY UPDATE
+    `value` = VALUES(`value`),
+    `type` = VALUES(`type`),
+    `description` = VALUES(`description`);
+
+-- Disable Virtual Account for bank transfers
+INSERT INTO `settings` (`key`, `value`, `type`, `description`)
+VALUES
+    ('transfer_use_va', '0', 'boolean', 'Use Virtual Account for transfers (0=disabled, 1=enabled)')
+ON DUPLICATE KEY UPDATE
+    `value` = VALUES(`value`),
+    `type` = VALUES(`type`),
+    `description` = VALUES(`description`);
+
+-- Enable Static QRIS and set image URL (adjust path as needed)
+INSERT INTO `settings` (`key`, `value`, `type`, `description`)
+VALUES
+    ('qris_static_enabled', '1', 'boolean', 'Use static QRIS image instead of gateway-generated QR'),
+    ('qris_static_image_url', '/assets/img/qris-gopay.svg', 'string', 'Static QRIS image path (relative to public)')
+ON DUPLICATE KEY UPDATE
+    `value` = VALUES(`value`),
+    `type` = VALUES(`type`),
+    `description` = VALUES(`description`);
+
+COMMIT;

@@ -5,6 +5,7 @@ require_once __DIR__ . '/../models/Product.php';
 require_once __DIR__ . '/../models/Payment.php';
 require_once __DIR__ . '/../models/Notification.php';
 require_once __DIR__ . '/../models/Transaction.php';
+require_once __DIR__ . '/../helpers/ExportHelper.php';
 require_once __DIR__ . '/../models/Customer.php';
 require_once __DIR__ . '/BaseController.php';
 
@@ -384,6 +385,9 @@ class OrderController extends BaseController {
         $limit = intval($_GET['limit'] ?? 20);
         $status = $_GET['status'] ?? null;
         $paymentStatus = $_GET['payment_status'] ?? null;
+        $search = $_GET['search'] ?? null;
+        $dateFrom = $_GET['date_from'] ?? null;
+        $dateTo = $_GET['date_to'] ?? null;
         $offset = ($page - 1) * $limit;
         
         $where = [];
@@ -395,6 +399,20 @@ class OrderController extends BaseController {
         if ($paymentStatus) {
             $where[] = "o.payment_status = ?";
             $params[] = $paymentStatus;
+        }
+        if ($search) {
+            $where[] = "(o.order_number LIKE ? OR o.customer_name LIKE ? OR o.customer_phone LIKE ?)";
+            $params[] = "%$search%";
+            $params[] = "%$search%";
+            $params[] = "%$search%";
+        }
+        if ($dateFrom) {
+            $where[] = "DATE(o.created_at) >= ?";
+            $params[] = $dateFrom;
+        }
+        if ($dateTo) {
+            $where[] = "DATE(o.created_at) <= ?";
+            $params[] = $dateTo;
         }
         $whereSql = count($where) ? (" WHERE " . implode(" AND ", $where)) : "";
 
@@ -616,7 +634,7 @@ class OrderController extends BaseController {
             'discount_amount' => (float)($order['discount_amount'] ?? 0),
             'discount_percentage' => 0,
             'tax_amount' => (float)($order['tax_amount'] ?? 0),
-            'tax_percentage' => null,
+            'tax_percentage' => 0,
             'total_amount' => (float)($order['total_amount'] ?? 0),
             'payment_method' => $order['payment_method'] ?? null,
             'payment_reference' => $order['payment_reference'] ?? ($payment['transaction_id'] ?? null),
@@ -677,6 +695,117 @@ class OrderController extends BaseController {
         $this->sendSuccess($stats);
     }
 
+    public function export() {
+        $this->checkAuthentication();
+        $this->requireAdmin();
+        $format = $_GET['format'] ?? 'csv';
+        $status = $_GET['status'] ?? '';
+        $paymentStatus = $_GET['payment_status'] ?? '';
+        $dateFrom = $_GET['date_from'] ?? '';
+        $dateTo = $_GET['date_to'] ?? '';
+        $search = $_GET['search'] ?? '';
+
+        $sql = "SELECT 
+                    o.*, 
+                    COALESCE((SELECT p.status FROM payments p WHERE p.order_id = o.id ORDER BY p.created_at DESC LIMIT 1), o.payment_status) AS payment_status_resolved,
+                    (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi WHERE oi.order_id = o.id) AS items_count
+                FROM orders o
+                WHERE 1=1";
+        $params = [];
+        if ($search) {
+            $sql .= " AND (o.order_number LIKE ? OR o.customer_name LIKE ? OR o.customer_phone LIKE ?)";
+            $params[] = "%$search%";
+            $params[] = "%$search%";
+            $params[] = "%$search%";
+        }
+        if ($status) {
+            $sql .= " AND o.order_status = ?";
+            $params[] = $status;
+        }
+        if ($paymentStatus) {
+            $sql .= " AND o.payment_status = ?";
+            $params[] = $paymentStatus;
+        }
+        if ($dateFrom) {
+            $sql .= " AND DATE(o.created_at) >= ?";
+            $params[] = $dateFrom;
+        }
+        if ($dateTo) {
+            $sql .= " AND DATE(o.created_at) <= ?";
+            $params[] = $dateTo;
+        }
+        $sql .= " ORDER BY o.created_at DESC";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $data = [];
+        foreach ($orders as $o) {
+            $data[] = [
+                $o['order_number'] ?? '',
+                !empty($o['paid_at']) ? ExportHelper::formatDate($o['paid_at'], 'd/m/Y H:i') : ExportHelper::formatDate($o['created_at'] ?? '', 'd/m/Y H:i'),
+                $o['customer_name'] ?? 'Online Customer',
+                $o['customer_phone'] ?? '-',
+                (int)($o['items_count'] ?? 0),
+                ucfirst($o['payment_method'] ?? '-'),
+                strtoupper($o['payment_status_resolved'] ?? ($o['payment_status'] ?? '-')),
+                strtoupper($o['order_status'] ?? '-'),
+                ExportHelper::formatCurrency((float)($o['subtotal'] ?? 0)),
+                ExportHelper::formatCurrency((float)($o['discount_amount'] ?? 0)),
+                ExportHelper::formatCurrency((float)($o['tax_amount'] ?? 0)),
+                ExportHelper::formatCurrency((float)($o['shipping_amount'] ?? 0)),
+                ExportHelper::formatCurrency((float)($o['total_amount'] ?? 0))
+            ];
+        }
+
+        $headers = [
+            'Order Number',
+            'Date',
+            'Customer',
+            'Phone',
+            'Items',
+            'Payment Method',
+            'Payment Status',
+            'Order Status',
+            'Subtotal',
+            'Discount Amount',
+            'Tax Amount',
+            'Shipping Amount',
+            'Total Amount'
+        ];
+
+        $ts = date('Y-m-d_His');
+        $filename = 'orders_' . $ts . '.' . $format;
+
+        try {
+            if ($format === 'excel' || $format === 'xlsx') {
+                $filepath = ExportHelper::exportToExcel($data, $filename, $headers, 'Orders');
+            } else if ($format === 'pdf') {
+                $html = ExportHelper::generateHTMLTable($data, $headers, 'Orders');
+                $filepath = ExportHelper::exportToPDF($html, $filename, 'L');
+            } else {
+                $filepath = ExportHelper::exportToCSV($data, $filename, $headers);
+            }
+
+            if (file_exists($filepath)) {
+                header('Content-Type: application/octet-stream');
+                header('Content-Disposition: attachment; filename="' . basename($filepath) . '"');
+                header('Content-Length: ' . filesize($filepath));
+                header('Cache-Control: must-revalidate');
+                header('Pragma: public');
+                readfile($filepath);
+                unlink($filepath);
+                exit;
+            } else {
+                $this->sendError('Failed to generate export file', 500);
+            }
+        } catch (Exception $e) {
+            error_log('Order export failed: ' . $e->getMessage());
+            $this->sendError('Export failed: ' . $e->getMessage(), 500);
+        }
+    }
+
     public function syncTransaction() {
         $this->checkAuthentication();
         $this->requireRole(['admin', 'manager']);
@@ -696,7 +825,7 @@ $orderController = new OrderController($pdo);
 
 $action = $_GET['action'] ?? '';
 
-switch ($action) {
+    switch ($action) {
     case 'create':
         $orderController->create();
         break;
@@ -727,10 +856,13 @@ switch ($action) {
     case 'stats':
         $orderController->getStats();
         break;
-    case 'sync-transaction':
-        $orderController->syncTransaction();
-        break;
-    default:
-        $orderController->sendError('Invalid action', 400);
-}
+        case 'sync-transaction':
+            $orderController->syncTransaction();
+            break;
+        case 'export':
+            $orderController->export();
+            break;
+        default:
+            $orderController->sendError('Invalid action', 400);
+    }
 

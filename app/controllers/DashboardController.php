@@ -79,7 +79,7 @@ class DashboardController extends BaseController {
             // Low stock count (always current, not period-based)
             $lowStockSql = "SELECT COUNT(*) as count 
                 FROM products 
-                WHERE stock_quantity <= min_stock_level AND is_active = 1";
+                WHERE stock_quantity < min_stock_level AND is_active = 1";
             $lowStockStmt = $this->pdo->query($lowStockSql);
             $lowStockCount = $lowStockStmt->fetch()['count'];
             
@@ -211,6 +211,7 @@ class DashboardController extends BaseController {
     public function cashierStats() {
         try {
             $this->checkAuthentication();
+            $this->checkRoles(['cashier','manager','admin']);
             
             $userId = $this->user['id'];
             $today = date('Y-m-d');
@@ -284,7 +285,7 @@ class DashboardController extends BaseController {
             // Low stock count
             $lowStockSql = "SELECT COUNT(*) as count 
                 FROM products 
-                WHERE stock_quantity <= min_stock_level AND is_active = 1";
+                WHERE stock_quantity < min_stock_level AND is_active = 1";
             $lowStockResult = $this->pdo->query($lowStockSql)->fetch();
             $lowStockCount = ($lowStockResult && isset($lowStockResult['count'])) ? (int)$lowStockResult['count'] : 0;
             
@@ -345,7 +346,7 @@ class DashboardController extends BaseController {
             // Low stock
             $lowStockSql = "SELECT COUNT(*) as count 
                 FROM products 
-                WHERE stock_quantity > 0 AND stock_quantity <= min_stock_level AND is_active = 1";
+                WHERE stock_quantity > 0 AND stock_quantity < min_stock_level AND is_active = 1";
             $lowStock = $this->pdo->query($lowStockSql)->fetch()['count'];
             
             // Stock value
@@ -420,6 +421,7 @@ class DashboardController extends BaseController {
     public function paymentMethods() {
         try {
             $this->checkAuthentication();
+            $this->checkPermission('reports.view');
 
             $period = $_GET['period'] ?? 'today';
             $from = $_GET['from'] ?? null;

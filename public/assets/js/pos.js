@@ -250,7 +250,7 @@ class POSManager {
                 <h4 class="product-name">${product.name}</h4>
                 <p class="product-sku">SKU: ${product.sku}</p>
                 <p class="product-price">${formatPrice(product.price)}</p>
-                <p class="product-stock ${product.stock_quantity <= product.min_stock_level ? 'low-stock' : ''} ${product.stock_quantity <= 0 ? 'out-of-stock' : ''}">
+                <p class="product-stock ${product.stock_quantity < product.min_stock_level ? 'low-stock' : ''} ${product.stock_quantity <= 0 ? 'out-of-stock' : ''}">
                     Stock: ${product.stock_quantity} ${product.unit || 'pcs'}
                 </p>
                 ${product.stock_quantity <= 0 ? '<div class="out-of-stock-badge">Out of Stock</div>' : ''}

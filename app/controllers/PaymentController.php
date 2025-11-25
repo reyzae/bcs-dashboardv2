@@ -502,7 +502,7 @@ class PaymentController extends BaseController {
             'discount_amount' => (float)($order['discount_amount'] ?? 0),
             'discount_percentage' => 0,
             'tax_amount' => (float)($order['tax_amount'] ?? 0),
-            'tax_percentage' => null,
+            'tax_percentage' => 0,
             'total_amount' => (float)($order['total_amount'] ?? 0),
             'payment_method' => $order['payment_method'] ?? null,
             'payment_reference' => $order['payment_reference'] ?? $order['payment']['transaction_id'] ?? null,

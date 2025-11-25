@@ -35,6 +35,22 @@ require_once __DIR__ . '/includes/header.php';
     <div class="card-header" style="display: flex; align-items: center; justify-content: space-between;">
         <h3 class="card-title"><i class="fas fa-receipt" style="color: var(--primary-color);"></i> Incoming Orders</h3>
         <div style="display: flex; gap: 0.5rem;">
+            <div class="dropdown" id="exportDropdown">
+                <button class="btn btn-outline-primary btn-sm dropdown-toggle" type="button" id="exportMenuBtn">
+                    <i class="fas fa-download"></i> Export
+                </button>
+                <div class="dropdown-menu" id="exportMenu">
+                    <a class="dropdown-item" href="#" data-format="csv">
+                        <i class="fas fa-file-csv"></i> Export as CSV
+                    </a>
+                    <a class="dropdown-item" href="#" data-format="excel">
+                        <i class="fas fa-file-excel"></i> Export as Excel
+                    </a>
+                    <a class="dropdown-item" href="#" data-format="pdf">
+                        <i class="fas fa-file-pdf"></i> Export as PDF
+                    </a>
+                </div>
+            </div>
             <button class="btn btn-secondary btn-sm" id="refreshOrdersBtn"><i class="fas fa-sync"></i> Refresh</button>
         </div>
     </div>
@@ -72,6 +88,17 @@ require_once __DIR__ . '/includes/header.php';
         <h3 class="card-title">Daftar Pesanan</h3>
         <div style="display: flex; gap: 0.5rem; align-items: center;">
             <span id="activeStatusLabel" class="badge">pending</span>
+            <input type="text" id="orderSearchInput" placeholder="Cari order atau customer" style="padding: 0.35rem 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.85rem;">
+            <select id="orderDateQuick" style="padding: 0.35rem 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.85rem;">
+                <option value="">Semua Tanggal</option>
+                <option value="today">Hari Ini</option>
+                <option value="yesterday">Kemarin</option>
+                <option value="week">7 Hari</option>
+                <option value="month">30 Hari</option>
+                <option value="custom">Custom</option>
+            </select>
+            <input type="date" id="orderDateFrom" style="display:none; padding: 0.35rem 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.85rem;">
+            <input type="date" id="orderDateTo" style="display:none; padding: 0.35rem 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.85rem;">
         </div>
     </div>
     <div class="card-body no-padding">

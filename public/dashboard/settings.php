@@ -233,7 +233,7 @@ require_once 'includes/header.php';
                                             <i class="fas fa-phone" style="color: var(--primary-color);"></i>
                                             Phone <span style="color: #ef4444;">*</span>
                                         </label>
-                                        <input type="tel" id="companyPhone" class="form-control" value="+62 21 1234 5678" required>
+                                        <input type="tel" id="companyPhone" class="form-control" value="+6285121010199" required>
                         </div>
                     </div>
 
@@ -584,7 +584,7 @@ Sampai jumpa kembali.</textarea>
                                             <i class="fas fa-exclamation-triangle" style="color: #f59e0b;"></i>
                                             Low Stock Alert Threshold
                         </label>
-                                        <input type="number" id="lowStockThreshold" class="form-control" value="10" min="1" max="100" style="padding: 0.75rem; border-radius: 8px;">
+                                        <input type="number" id="lowStockThreshold" class="form-control" value="3" min="1" max="100" style="padding: 0.75rem; border-radius: 8px;">
                                         <small style="display: block; margin-top: 0.25rem; color: #6b7280; font-size: 0.75rem;">Show warning when stock falls below this number</small>
                                     </div>
                                 </div>
@@ -613,42 +613,37 @@ Sampai jumpa kembali.</textarea>
             </div>
                     <div class="card-body" style="padding: 2rem;">
                         <form id="appearanceSettingsForm">
-                            <div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 1rem; border-radius: 6px; margin-bottom: 2rem;">
-                                <div style="display: flex; align-items: start; gap: 0.75rem;">
-                                    <i class="fas fa-info-circle" style="color: #3b82f6; margin-top: 0.25rem;"></i>
+                            <div class="form-group" style="margin-bottom: 1.5rem;">
+                                <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                                    <i class="fas fa-image" style="color: var(--primary-color);"></i>
+                                    Company Logo
+                                </label>
+                                <div style="display: flex; align-items: center; gap: 1rem;">
+                                    <div style="width: 120px; height: 120px; border: 2px dashed #d1d5db; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #f9fafb;">
+                                        <img id="brandLogoPreview" src="" alt="Brand Logo" style="max-width: 100%; max-height: 100%; display:none;" />
+                                        <i id="brandLogoPlaceholder" class="fas fa-image" style="font-size: 2rem; color: #d1d5db;"></i>
+                                    </div>
                                     <div>
-                                        <div style="font-weight: 600; color: #1e40af; margin-bottom: 0.25rem;">Coming Soon</div>
-                                        <div style="font-size: 0.875rem; color: #1e40af;">Appearance customization features including logo upload, color themes, and brand settings will be available in the next update.</div>
+                                        <input type="file" id="brandLogoInput" accept="image/png,image/jpeg,image/svg+xml" style="display:none;">
+                                        <button type="button" class="btn btn-secondary" id="brandLogoUploadBtn" style="margin-bottom: 0.5rem;">
+                                            <i class="fas fa-upload"></i> Upload Logo
+                                        </button>
+                                        <div style="font-size: 0.75rem; color: #6b7280;">Recommended: 400x400px, PNG or SVG</div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div style="opacity: 0.5; pointer-events: none;">
-                                <div class="form-group" style="margin-bottom: 1.5rem;">
-                                    <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                        <i class="fas fa-image" style="color: var(--primary-color);"></i>
-                                        Company Logo
-                        </label>
-                                    <div style="display: flex; align-items: center; gap: 1rem;">
-                                        <div style="width: 120px; height: 120px; border: 2px dashed #d1d5db; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #f9fafb;">
-                                            <i class="fas fa-image" style="font-size: 2rem; color: #d1d5db;"></i>
-                                        </div>
-                                        <div>
-                                            <button type="button" class="btn btn-secondary" style="margin-bottom: 0.5rem;">
-                                                <i class="fas fa-upload"></i> Upload Logo
-                                            </button>
-                                            <div style="font-size: 0.75rem; color: #6b7280;">Recommended: 400x400px, PNG or SVG</div>
-                                        </div>
-                                    </div>
-                    </div>
+                            <div class="form-group">
+                                <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                                    <i class="fas fa-fill-drip" style="color: var(--primary-color);"></i>
+                                    Primary Brand Color
+                                </label>
+                                <input type="color" id="brandPrimaryColor" value="#16a34a" style="width: 100px; height: 50px; border: 1px solid #d1d5db; border-radius: 8px;">
+                            </div>
 
-                    <div class="form-group">
-                                    <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                        <i class="fas fa-fill-drip" style="color: var(--primary-color);"></i>
-                                        Primary Brand Color
-                                    </label>
-                                    <input type="color" value="#667eea" style="width: 100px; height: 50px; border: 1px solid #d1d5db; border-radius: 8px;">
-                                </div>
+                            <div class="form-actions" style="margin-top: 1.5rem; display:flex; justify-content:flex-end; gap:.75rem;">
+                                <button type="button" class="btn btn-secondary" onclick="settingsManager.resetForm('appearanceSettingsForm')"><i class="fas fa-undo"></i> Reset</button>
+                                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Changes</button>
                             </div>
                         </form>
                     </div>
@@ -1315,6 +1310,33 @@ const settingsManager = {
         this.setupUnsavedChangesWarning();
         this.loadSystemInfo();
         this.loadSettings();
+        // Appearance handlers
+        const uploadBtn = document.getElementById('brandLogoUploadBtn');
+        const fileInput = document.getElementById('brandLogoInput');
+        if (uploadBtn && fileInput) {
+            uploadBtn.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', async () => {
+                if (!fileInput.files || fileInput.files.length === 0) return;
+                const form = new FormData();
+                form.append('file', fileInput.files[0]);
+                showLoading('Uploading logo...');
+                try {
+                    const res = await fetch('../api.php?controller=settings&action=upload_logo', { method: 'POST', body: form });
+                    const json = await res.json();
+                    if (json.success && json.data && json.data.path) {
+                        const prev = document.getElementById('brandLogoPreview');
+                        const ph = document.getElementById('brandLogoPlaceholder');
+                        if (prev) { prev.src = '../' + json.data.path; prev.style.display = 'block'; }
+                        if (ph) ph.style.display = 'none';
+                        showToast('Logo updated', 'success');
+                    } else {
+                        throw new Error(json.message || 'Upload failed');
+                    }
+                } catch (e) {
+                    showToast('Upload failed: ' + e.message, 'error');
+                } finally { hideLoading(); }
+            });
+        }
         console.log('✅ Settings Manager initialized');
     },
     
@@ -1405,6 +1427,21 @@ const settingsManager = {
         if (settings.force_strong_password) this.setCheckboxValue('forceStrongPassword', settings.force_strong_password === '1');
         if (settings.enable_activity_log) this.setCheckboxValue('enableActivityLog', settings.enable_activity_log === '1');
         
+        // Appearance & Branding
+        if (settings.brand_primary_color) {
+            const el = document.getElementById('brandPrimaryColor');
+            if (el) el.value = settings.brand_primary_color;
+            document.documentElement.style.setProperty('--primary-color', settings.brand_primary_color);
+        }
+        if (settings.brand_logo) {
+            const prev = document.getElementById('brandLogoPreview');
+            const ph = document.getElementById('brandLogoPlaceholder');
+            if (prev) { prev.src = '../' + settings.brand_logo; prev.style.display = 'block'; }
+            if (ph) ph.style.display = 'none';
+            const headerLogo = document.querySelector('.sidebar-logo .logo-img');
+            if (headerLogo) headerLogo.src = '../' + settings.brand_logo;
+        }
+
         // Advanced Settings
         if (settings.debug_mode) this.setCheckboxValue('debugMode', settings.debug_mode === '1');
         if (settings.performance_monitoring) this.setCheckboxValue('performanceMonitoring', settings.performance_monitoring === '1');
@@ -1684,6 +1721,10 @@ const settingsManager = {
                 
                 if (debugMode) data.debug_mode = debugMode.checked ? '1' : '0';
                 if (performanceMonitoring) data.performance_monitoring = performanceMonitoring.checked ? '1' : '0';
+                break;
+            case 'appearance':
+                const brandPrimaryColor = document.getElementById('brandPrimaryColor');
+                if (brandPrimaryColor) data.brand_primary_color = brandPrimaryColor.value;
                 break;
         }
         

@@ -32,7 +32,7 @@ class PermissionMiddleware {
             // Can manage products, customers, view reports
             'products.view', 'products.create', 'products.update', 'products.delete',
             'customers.view', 'customers.create', 'customers.update', 'customers.delete',
-            'transactions.view', 'transactions.create',
+            'transactions.view', 'transactions.create', 'transactions.update',
             'reports.view', 'reports.export',
             'pos.access'
         ],
@@ -41,13 +41,11 @@ class PermissionMiddleware {
             'pos.access',
             'customers.view',
             'products.view',
-            'transactions.view', 'transactions.create'
+            'transactions.view', 'transactions.create', 'transactions.update'
         ],
         'staff' => [
-            'pos.access',
             'customers.view',
-            'products.view',
-            'transactions.view'
+            'products.view'
         ]
     ];
     

@@ -10,6 +10,7 @@ require_once __DIR__ . '/../models/Transaction.php';
 require_once __DIR__ . '/../models/Product.php';
 require_once __DIR__ . '/../models/Customer.php';
 require_once __DIR__ . '/../helpers/ExportHelper.php';
+require_once __DIR__ . '/../helpers/PermissionMiddleware.php';
 
 class ReportController {
     private $pdo;
@@ -39,6 +40,8 @@ class ReportController {
      */
     public function getSalesStats() {
         try {
+            if (session_status() === PHP_SESSION_NONE) { session_start(); }
+            PermissionMiddleware::checkPermission('reports.view');
             $period = $_GET['period'] ?? 'month';
             $dateFrom = $_GET['date_from'] ?? null;
             $dateTo = $_GET['date_to'] ?? null;
@@ -122,6 +125,8 @@ class ReportController {
      */
     public function getTopProducts() {
         try {
+            if (session_status() === PHP_SESSION_NONE) { session_start(); }
+            PermissionMiddleware::checkPermission('reports.view');
             $limit = $_GET['limit'] ?? 10;
             $dateFrom = $_GET['date_from'] ?? date('Y-m-01');
             $dateTo = $_GET['date_to'] ?? date('Y-m-d');
@@ -173,6 +178,8 @@ class ReportController {
      */
     public function getSalesTrend() {
         try {
+            if (session_status() === PHP_SESSION_NONE) { session_start(); }
+            PermissionMiddleware::checkPermission('reports.view');
             $period = $_GET['period'] ?? 'month';
             $dateFrom = $_GET['date_from'] ?? date('Y-m-01');
             $dateTo = $_GET['date_to'] ?? date('Y-m-d');
@@ -221,6 +228,8 @@ class ReportController {
      */
     public function getCategoryPerformance() {
         try {
+            if (session_status() === PHP_SESSION_NONE) { session_start(); }
+            PermissionMiddleware::checkPermission('reports.view');
             $dateFrom = $_GET['date_from'] ?? date('Y-m-01');
             $dateTo = $_GET['date_to'] ?? date('Y-m-d');
             
@@ -288,6 +297,8 @@ class ReportController {
      * Export Sales Report
      */
     public function exportSales($format = 'excel', $dateFrom = null, $dateTo = null) {
+        if (session_status() === PHP_SESSION_NONE) { session_start(); }
+        PermissionMiddleware::checkPermission('reports.export');
         // Get sales data
         $sql = "SELECT 
                     DATE(t.created_at) as transaction_date,
@@ -384,6 +395,8 @@ class ReportController {
      * Export Inventory Report
      */
     public function exportInventory($format = 'excel') {
+        if (session_status() === PHP_SESSION_NONE) { session_start(); }
+        PermissionMiddleware::checkPermission('reports.export');
         // Get inventory data
         $sql = "SELECT 
                     p.sku,
@@ -471,6 +484,8 @@ class ReportController {
      * Export Customer Report
      */
     public function exportCustomers($format = 'excel') {
+        if (session_status() === PHP_SESSION_NONE) { session_start(); }
+        PermissionMiddleware::checkPermission('reports.export');
         // Get customer data with transaction summary
         $sql = "SELECT 
                     c.name,
@@ -545,6 +560,8 @@ class ReportController {
      * Export Product Performance Report
      */
     public function exportProductPerformance($format = 'excel', $dateFrom = null, $dateTo = null) {
+        if (session_status() === PHP_SESSION_NONE) { session_start(); }
+        PermissionMiddleware::checkPermission('reports.export');
         // Get product sales data
         $sql = "SELECT 
                     p.name as product_name,
@@ -634,4 +651,3 @@ class ReportController {
         ];
     }
 }
-

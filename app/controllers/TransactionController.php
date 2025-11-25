@@ -33,6 +33,8 @@ class TransactionController extends BaseController {
      * Create new transaction
      */
     public function create() {
+        $this->checkAuthentication();
+        $this->checkPermission('transactions.create');
         if ($this->getMethod() !== 'POST') {
             $this->sendError('Method not allowed', 405);
         }
@@ -140,6 +142,7 @@ class TransactionController extends BaseController {
     public function list() {
         // Ensure we have current user context for sync user_id
         $this->checkAuthentication();
+        $this->checkPermission('transactions.view');
         
         $page = intval($_GET['page'] ?? 1);
         $limit = intval($_GET['limit'] ?? 20);
@@ -190,7 +193,11 @@ class TransactionController extends BaseController {
         // Merge missing Shop orders into All view as pseudo-transactions
         if (!$type || $type === 'all') {
             try {
-                $sql = "SELECT o.* FROM orders o
+                $sql = "SELECT 
+                            o.*, 
+                            COALESCE((SELECT SUM(oi.quantity) FROM order_items oi WHERE oi.order_id = o.id), 0) AS items_count_qty,
+                            COALESCE((SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id), 0) AS items_count_lines
+                        FROM orders o
                         WHERE o.payment_status = 'paid' AND o.order_status IN ('processing','ready','completed')
                         ORDER BY o.paid_at DESC LIMIT 200";
                 $stmt = $this->pdo->prepare($sql);
@@ -215,7 +222,7 @@ class TransactionController extends BaseController {
                         'id' => null,
                         'transaction_number' => $order['order_number'] ?? ('ORD' . $order['id']),
                         'customer_name' => $order['customer_name'] ?? 'Online Customer',
-                        'items_count' => $order['items_count'] ?? 0,
+                        'items_count' => max((int)($order['items_count_qty'] ?? 0), (int)($order['items_count_lines'] ?? 0)),
                         'total_amount' => (float)($order['total_amount'] ?? 0),
                         'payment_method' => $order['payment_method'] ?? null,
                         'status' => 'completed',
@@ -327,7 +334,7 @@ class TransactionController extends BaseController {
                     'discount_amount' => (float)($order['discount_amount'] ?? 0),
                     'discount_percentage' => 0,
                     'tax_amount' => (float)($order['tax_amount'] ?? 0),
-                    'tax_percentage' => null,
+                    'tax_percentage' => 0,
                     'total_amount' => (float)($order['total_amount'] ?? 0),
                     'payment_method' => $order['payment_method'] ?? null,
                     'payment_reference' => $paymentRef,
@@ -376,6 +383,8 @@ class TransactionController extends BaseController {
      * Get single transaction
      */
     public function get() {
+        $this->checkAuthentication();
+        $this->checkPermission('transactions.view');
         $id = intval($_GET['id']);
         
         if (!$id) {
@@ -393,6 +402,171 @@ class TransactionController extends BaseController {
         $transaction['items'] = $items;
         
         $this->sendSuccess($transaction);
+    }
+
+    /**
+     * Resolve transaction by transaction_number or order_number
+     * If transaction does not exist, create it from the corresponding paid order.
+     */
+    public function resolveByNumber() {
+        $this->checkAuthentication();
+        $this->checkPermission('transactions.view');
+        try {
+            $txnNumber = $_GET['transaction_number'] ?? '';
+            $orderNumber = $_GET['order_number'] ?? '';
+
+            if (empty($txnNumber) && empty($orderNumber)) {
+                $this->sendError('transaction_number or order_number is required', 400);
+                return;
+            }
+
+            // Try find by transaction_number first
+            if (!empty($txnNumber)) {
+                $stmt = $this->pdo->prepare("SELECT id FROM transactions WHERE transaction_number = ? LIMIT 1");
+                $stmt->execute([$txnNumber]);
+                $row = $stmt->fetch();
+                if ($row && isset($row['id'])) {
+                    $tid = (int)$row['id'];
+                    $transaction = $this->transactionModel->findWithDetails($tid);
+                    $transaction['items'] = $this->transactionModel->getItems($tid);
+                    $this->sendSuccess($transaction, 'Transaction resolved');
+                    return;
+                }
+            }
+
+            // Derive order_number
+            if (empty($orderNumber)) {
+                if (!empty($txnNumber)) { $orderNumber = $txnNumber; }
+            }
+            if (empty($orderNumber)) {
+                $this->sendError('Order number could not be derived', 400);
+                return;
+            }
+
+            // Find order by number
+            $order = $this->orderModel->findByOrderNumber($orderNumber);
+            if (!$order) {
+                error_log("Order not found: {$orderNumber}");
+                $this->sendError('Order not found: ' . $orderNumber, 404);
+                return;
+            }
+
+            // Check if a transaction already exists for this order (by payment_reference or notes prefix)
+            $existsId = null;
+            $ref = $order['payment_reference'] ?? null;
+            if ($ref) {
+                $chk = $this->pdo->prepare("SELECT id FROM transactions WHERE payment_reference = ? LIMIT 1");
+                $chk->execute([$ref]);
+                $row = $chk->fetch();
+                if ($row && isset($row['id'])) { $existsId = (int)$row['id']; }
+            }
+            if (!$existsId) {
+                $prefix = 'Order ' . ($order['order_number'] ?? $order['id']);
+                $chk2 = $this->pdo->prepare("SELECT id FROM transactions WHERE notes LIKE ? LIMIT 1");
+                $chk2->execute([$prefix . '%']);
+                $row2 = $chk2->fetch();
+                if ($row2 && isset($row2['id'])) { $existsId = (int)$row2['id']; }
+            }
+
+            if ($existsId) {
+                $transaction = $this->transactionModel->findWithDetails($existsId);
+                $transaction['items'] = $this->transactionModel->getItems($existsId);
+                $this->sendSuccess($transaction, 'Transaction resolved');
+                return;
+            }
+
+            // Validate payment status before creating transaction
+            $paidOrder = strtolower($order['payment_status'] ?? '') === 'paid';
+            $payment = null;
+            try { $payment = $this->paymentModel->findByOrderId($order['id']); } catch (Exception $e) { $payment = null; }
+            $payStatus = strtolower($payment['status'] ?? '');
+            $paidByPayment = in_array($payStatus, ['success','paid','settlement','capture'], true);
+            if (!($paidOrder || $paidByPayment)) {
+                $this->sendError('Order not paid yet', 409);
+                return;
+            }
+
+            // Build transaction data and items from order
+            $items = $this->orderModel->getItems($order['id']);
+            $txItems = [];
+            foreach ($items as $it) {
+                $pid = isset($it['product_id']) ? (int)$it['product_id'] : 0;
+                $qty = isset($it['quantity']) ? (int)$it['quantity'] : 0;
+                $price = isset($it['unit_price']) ? (float)$it['unit_price'] : 0.0;
+                if ($pid <= 0 || $qty <= 0) { continue; }
+                $txItems[] = [
+                    'product_id' => $pid,
+                    'quantity' => $qty,
+                    'unit_price' => $price,
+                    'discount_amount' => 0,
+                    'discount_percentage' => 0,
+                    'total_price' => (float)($it['total_price'] ?? ($qty * $price))
+                ];
+            }
+            if (empty($txItems)) {
+                $this->sendError('Order has no valid items to create transaction', 409);
+                return;
+            }
+
+            // Resolve or create customer
+            $customerId = null;
+            $phone = $order['customer_phone'] ?? '';
+            $email = $order['customer_email'] ?? '';
+            if (!empty($phone) || !empty($email)) {
+                $cstmt = $this->pdo->prepare("SELECT id FROM customers WHERE (phone = ? AND phone IS NOT NULL) OR (email = ? AND email IS NOT NULL) LIMIT 1");
+                $cstmt->execute([$phone, $email]);
+                $rowc = $cstmt->fetch();
+                if ($rowc && isset($rowc['id'])) { $customerId = (int)$rowc['id']; }
+            }
+            if (!$customerId) {
+                $code = $this->customerModel->generateCustomerCode();
+                $customerId = $this->customerModel->create([
+                    'customer_code' => $code,
+                    'name' => $order['customer_name'] ?: 'Online Customer',
+                    'email' => $email ?: null,
+                    'phone' => $phone ?: null,
+                    'address' => $order['customer_address'] ?? null,
+                    'is_active' => 1
+                ]);
+            }
+
+            // Payment reference fallback
+            $paymentRef = $order['payment_reference'] ?? ($payment['transaction_id'] ?? null);
+
+            $txData = [
+                'customer_id' => $customerId,
+                'user_id' => $this->getSystemUserId(),
+                'served_by' => 'System Online',
+                'transaction_type' => 'sale',
+                'subtotal' => (float)($order['subtotal'] ?? 0),
+                'discount_amount' => (float)($order['discount_amount'] ?? 0),
+                'discount_percentage' => 0,
+                'tax_amount' => (float)($order['tax_amount'] ?? 0),
+                'tax_percentage' => 0,
+                'total_amount' => (float)($order['total_amount'] ?? 0),
+                'payment_method' => $order['payment_method'] ?? null,
+                'payment_reference' => $paymentRef,
+                'cash_received' => null,
+                'cash_change' => null,
+                'status' => 'completed',
+                'notes' => 'Order ' . ($order['order_number'] ?? $order['id'])
+            ];
+
+            // Create transaction
+            $newId = null;
+            try { $newId = $this->transactionModel->createWithItems($txData, $txItems); } catch (Exception $e) { $newId = null; }
+            if (!$newId) {
+                $this->sendError('Failed to create transaction from order', 500);
+                return;
+            }
+
+            $transaction = $this->transactionModel->findWithDetails($newId);
+            $transaction['items'] = $this->transactionModel->getItems($newId);
+            $this->sendSuccess($transaction, 'Transaction created from order');
+        } catch (Exception $e) {
+            error_log("resolveByNumber error: " . $e->getMessage() . " for transaction_number: " . ($txnNumber ?? 'null') . " or order_number: " . ($orderNumber ?? 'null'));
+            $this->sendError($e->getMessage(), 500);
+        }
     }
     
     /**
@@ -437,6 +611,8 @@ class TransactionController extends BaseController {
      */
     public function getStats() {
         $this->checkAuthentication();
+        $this->checkPermission('reports.view');
+        $this->checkAuthentication();
         $this->syncShopTransactions();
         $startDate = $_GET['start_date'] ?? null;
         $endDate = $_GET['end_date'] ?? null;
@@ -449,6 +625,8 @@ class TransactionController extends BaseController {
      * Get daily sales report
      */
     public function getDailySales() {
+        $this->checkAuthentication();
+        $this->checkPermission('reports.view');
         $startDate = $_GET['start_date'] ?? date('Y-m-d', strtotime('-30 days'));
         $endDate = $_GET['end_date'] ?? date('Y-m-d');
         
@@ -474,6 +652,8 @@ class TransactionController extends BaseController {
      * Get top selling products
      */
     public function getTopProducts() {
+        $this->checkAuthentication();
+        $this->checkPermission('reports.view');
         $limit = intval($_GET['limit'] ?? 10);
         $startDate = $_GET['start_date'] ?? null;
         $endDate = $_GET['end_date'] ?? null;
@@ -669,24 +849,34 @@ class TransactionController extends BaseController {
      * Export transactions to CSV/Excel
      */
     public function export() {
+        $this->checkAuthentication();
+        $this->checkPermission('reports.export');
         $format = $_GET['format'] ?? 'csv';
         $status = $_GET['status'] ?? '';
         $dateFrom = $_GET['date_from'] ?? '';
         $dateTo = $_GET['date_to'] ?? '';
+        $paymentMethod = $_GET['payment_method'] ?? '';
+        $search = $_GET['search'] ?? '';
+        $source = $_GET['source'] ?? '';
         
         // Build query
         $sql = "SELECT 
                     t.id,
-                    t.invoice_number,
-                    t.transaction_date,
+                    t.transaction_number,
                     c.name as customer_name,
                     c.phone as customer_phone,
                     u.full_name as cashier_name,
+                    t.subtotal,
+                    t.discount_amount,
+                    t.tax_amount,
                     t.total_amount,
                     t.payment_method,
                     t.status,
                     t.notes,
-                    t.created_at
+                    t.created_at,
+                    t.served_by,
+                    t.payment_reference,
+                    (SELECT COALESCE(SUM(ti.quantity),0) FROM transaction_items ti WHERE ti.transaction_id = t.id) AS items_count
                 FROM transactions t
                 LEFT JOIN customers c ON t.customer_id = c.id
                 LEFT JOIN users u ON t.user_id = u.id
@@ -694,18 +884,37 @@ class TransactionController extends BaseController {
         
         $params = [];
         
+        // Search filter
+        if ($search) {
+            $sql .= " AND (t.transaction_number LIKE ? OR c.name LIKE ? OR c.phone LIKE ? OR t.payment_reference LIKE ?)";
+            $params[] = "%$search%";
+            $params[] = "%$search%";
+            $params[] = "%$search%";
+            $params[] = "%$search%";
+        }
+        
+        // Status filter
         if ($status) {
             $sql .= " AND t.status = ?";
             $params[] = $status;
         }
         
+        // Payment method filter
+        if ($paymentMethod) {
+            $sql .= " AND t.payment_method = ?";
+            $params[] = $paymentMethod;
+        }
+        
+        // Source filter: derived later from served_by/notes
+        
+        // Date range filter
         if ($dateFrom) {
-            $sql .= " AND DATE(t.transaction_date) >= ?";
+            $sql .= " AND DATE(t.created_at) >= ?";
             $params[] = $dateFrom;
         }
         
         if ($dateTo) {
-            $sql .= " AND DATE(t.transaction_date) <= ?";
+            $sql .= " AND DATE(t.created_at) <= ?";
             $params[] = $dateTo;
         }
         
@@ -714,35 +923,65 @@ class TransactionController extends BaseController {
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
         $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Apply source filter (POS/SHOP) in PHP, derived from served_by/notes
+        if ($source) {
+            $sourceUpper = strtoupper($source);
+            $transactions = array_values(array_filter($transactions, function($txn) use ($sourceUpper) {
+                $servedBy = strtolower($txn['served_by'] ?? '');
+                $notes = strtolower($txn['notes'] ?? '');
+                $derived = 'POS';
+                if ($servedBy === 'system online' || (strpos($notes, 'order ') === 0)) {
+                    $derived = 'SHOP';
+                }
+                return strtoupper($derived) === $sourceUpper;
+            }));
+        }
         
         // Prepare data for export
         $data = [];
         foreach ($transactions as $txn) {
+            $source = 'POS';
+            $servedBy = strtolower($txn['served_by'] ?? '');
+            $notes = strtolower($txn['notes'] ?? '');
+            if ($servedBy === 'system online' || (strpos($notes, 'order ') === 0)) {
+                $source = 'SHOP';
+            }
             $data[] = [
-                $txn['invoice_number'],
-                ExportHelper::formatDate($txn['transaction_date'], 'd/m/Y H:i'),
+                $txn['transaction_number'],
+                ExportHelper::formatDate($txn['created_at'], 'd/m/Y H:i'),
                 $txn['customer_name'] ?? 'Walk-in Customer',
                 $txn['customer_phone'] ?? '-',
                 $txn['cashier_name'] ?? '-',
-                ExportHelper::formatCurrency($txn['total_amount']),
                 ucfirst($txn['payment_method']),
                 ucfirst($txn['status']),
                 $txn['notes'] ?? '-',
-                ExportHelper::formatDate($txn['created_at'], 'd/m/Y H:i')
+                $source,
+                (int)($txn['items_count'] ?? 0),
+                ExportHelper::formatCurrency((float)($txn['subtotal'] ?? 0)),
+                ExportHelper::formatCurrency((float)($txn['discount_amount'] ?? 0)),
+                ExportHelper::formatCurrency((float)($txn['tax_amount'] ?? 0)),
+                ExportHelper::formatCurrency((float)($txn['total_amount'] ?? 0)),
+                $txn['payment_reference'] ?? '-'
             ];
         }
         
         $headers = [
-            'Invoice Number',
-            'Transaction Date',
+            'Transaction Number',
+            'Date',
             'Customer',
             'Phone',
             'Cashier',
-            'Total Amount',
             'Payment Method',
             'Status',
             'Notes',
-            'Created At'
+            'Source',
+            'Items Count',
+            'Subtotal',
+            'Discount Amount',
+            'Tax Amount',
+            'Total Amount',
+            'Payment Reference'
         ];
         
         $filename = 'transactions_' . date('Y-m-d_His') . '.' . $format;
@@ -750,6 +989,9 @@ class TransactionController extends BaseController {
         try {
             if ($format === 'excel' || $format === 'xlsx') {
                 $filepath = ExportHelper::exportToExcel($data, $filename, $headers, 'Transactions');
+            } else if ($format === 'pdf') {
+                $html = ExportHelper::generateHTMLTable($data, $headers, 'Transactions');
+                $filepath = ExportHelper::exportToPDF($html, $filename, 'L');
             } else {
                 // Default to CSV
                 $filepath = ExportHelper::exportToCSV($data, $filename, $headers);
@@ -779,45 +1021,47 @@ class TransactionController extends BaseController {
     }
 }
 
-// Handle requests
-$transactionController = new TransactionController($pdo);
-
-$action = $_GET['action'] ?? '';
-
-switch ($action) {
-    case 'create':
-        $transactionController->create();
-        break;
-    case 'list':
-        $transactionController->list();
-        break;
-    case 'sync-shop':
-        $transactionController->syncShop();
-        break;
-    case 'get':
-        $transactionController->get();
-        break;
-    case 'update-status':
-        $transactionController->updateStatus();
-        break;
-    case 'stats':
-        $transactionController->getStats();
-        break;
-    case 'daily-sales':
-        $transactionController->getDailySales();
-        break;
-    case 'top-products':
-        $transactionController->getTopProducts();
-        break;
-    case 'cancel':
-        $transactionController->cancel();
-        break;
-    case 'refund':
-        $transactionController->refund();
-        break;
-    case 'export':
-        $transactionController->export();
-        break;
-    default:
-        $transactionController->sendError('Invalid action', 400);
+if (!isset($_GET['controller'])) {
+    $transactionController = new TransactionController($pdo);
+    $action = $_GET['action'] ?? '';
+    switch ($action) {
+        case 'create':
+            $transactionController->create();
+            break;
+        case 'list':
+            $transactionController->list();
+            break;
+        case 'sync-shop':
+            $transactionController->syncShop();
+            break;
+        case 'get':
+            $transactionController->get();
+            break;
+        case 'resolve-by-number':
+            $transactionController->resolveByNumber();
+            break;
+        case 'update-status':
+            $transactionController->updateStatus();
+            break;
+        case 'stats':
+            $transactionController->getStats();
+            break;
+        case 'daily-sales':
+            $transactionController->getDailySales();
+            break;
+        case 'top-products':
+            $transactionController->getTopProducts();
+            break;
+        case 'cancel':
+            $transactionController->cancel();
+            break;
+        case 'refund':
+            $transactionController->refund();
+            break;
+        case 'export':
+            $transactionController->export();
+            break;
+        default:
+            $transactionController->sendError('Invalid action', 400);
+    }
 }

@@ -128,6 +128,41 @@
     .table-responsive {
         overflow-x: auto;
     }
+
+    /* Mobile Filter Bar */
+    .mobile-filter-bar {
+        padding: .75rem !important;
+        gap: .5rem !important;
+        box-shadow: none !important;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+    }
+    .chips-scroll { display: flex; gap: .5rem; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .chips-scroll::-webkit-scrollbar { height: 6px; }
+    .chips-scroll::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 6px; }
+
+    /* Segmented control */
+    .segmented { display: inline-flex; background: #fff; border: 1px solid #e5e7eb; border-radius: 9999px; overflow: hidden; }
+    .segmented button { padding: .375rem .75rem; border: none; background: transparent; color: #6b7280; font-size: .875rem; }
+    .segmented button.active { background: var(--primary-color); color: #fff; }
+
+    /* Filter selects as chips */
+    .filter-chip-select { appearance: none; -webkit-appearance: none; border: 1px solid #e5e7eb; border-radius: 9999px; padding: .375rem .75rem; background: #fff; color: #374151; font-size: .875rem; }
+    .status-tab-btn { border: 1px solid #e5e7eb; border-radius: 9999px; background: #fff; color: #374151; padding: .375rem .6rem; font-size: .8rem; }
+    .status-tab-btn.active { background: var(--primary-color); color: #fff; border-color: var(--primary-color); }
+
+    /* Stack filter bar and make search full width */
+    .mobile-filter-bar { flex-direction: column; align-items: stretch; }
+    .mobile-filter-bar #searchInput { width: 100%; min-width: unset; }
+    .mobile-filter-bar .chips-scroll { margin-top: .5rem; }
+}
+
+    /* Bottom Sheet */
+    .bottom-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top-left-radius: 16px; border-top-right-radius: 16px; box-shadow: 0 -12px 24px rgba(0,0,0,.12); transform: translateY(100%); transition: transform .25s ease; z-index: 1000; }
+    .bottom-sheet.open { transform: translateY(0); }
+    .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 999; }
+    .backdrop.show { opacity: 1; pointer-events: auto; }
+}
     
     /* Forms */
     .form-row {

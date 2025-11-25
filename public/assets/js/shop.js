@@ -64,7 +64,7 @@ const Catalog = {
   sort: 'relevance',
   activeFilters: new Set(),
   async init(){ await this.loadCategories(); await this.loadProducts(); this.bindEvents(); MiniCart.update() },
-  async loadCategories(){ try { const r = await Utils.apiCall('?controller=category&action=list'); this.categories = r.data||[]; this.renderCategories() } catch(e){} },
+  async loadCategories(){ try { const r = await Utils.apiCall('?controller=category&action=list'); let raw = r.data||[]; const pick = new Map(); raw.forEach(c=>{ const key = String(c?.name||'').trim().toLowerCase().replace(/\s+/g,' '); const curr = pick.get(key); const pc = Number(c?.product_count||0); if (!curr || pc > Number(curr.product_count||0) || (pc === Number(curr.product_count||0) && Number(c.id) < Number(curr.id))) { pick.set(key, c) } }); this.categories = Array.from(pick.values()); this.renderCategories() } catch(e){} },
   async loadProducts(categoryId=null){ try {
       const grid = document.getElementById('productsGrid'); const empty = document.getElementById('emptyState'); if (grid){ const ph = Array.from({length:8}).map(()=>`<div class="skeleton-card"><div class="skeleton-image"></div><div class="skeleton-content"><div class="skeleton-line" style="width:65%"></div><div class="skeleton-line" style="width:40%"></div></div></div>`).join(''); grid.innerHTML = ph; if (empty) empty.style.display='none' }
       let endpoint = '?controller=product&action=list&limit=50&is_active=1'
@@ -85,8 +85,12 @@ const Catalog = {
     if (viewGrid && viewList){ viewGrid.addEventListener('click',()=>{ this.view='grid'; viewGrid.classList.add('active'); viewList.classList.remove('active'); this.renderProducts() }); viewList.addEventListener('click',()=>{ this.view='list'; viewList.classList.add('active'); viewGrid.classList.remove('active'); this.renderProducts() }) }
     const reset = document.getElementById('resetFilters'); if (reset){ reset.addEventListener('click',()=>{ this.q=''; if (s) s.value=''; this.activeFilters.clear(); this.loadProducts() }) }
   },
-  renderCategories(){ const nav = document.getElementById('categoriesNav'); if (!nav) return; nav.innerHTML = ['<a href="#" data-cat="all" class="filter-chip active">Semua</a>'].concat(this.categories.map(c=>`<a href="#" data-cat="${c.id}" class="filter-chip">${c.name}</a>`)).join('');
-    nav.querySelectorAll('a').forEach(a=>{ a.addEventListener('click',(e)=>{ e.preventDefault(); nav.querySelectorAll('a').forEach(n=>n.classList.remove('active')); a.classList.add('active'); const id = a.getAttribute('data-cat'); this.loadProducts(id==='all'?null:id) }) }) },
+  renderCategories(){ const nav = document.getElementById('categoriesNav'); if (!nav) return; 
+    const options = ['<option value="all">Semua Kategori</option>'].concat(this.categories.map(c=>`<option value="${c.id}">${c.name}</option>`)).join('')
+    nav.innerHTML = `<select id="categorySelect" class="form-select category-select">${options}</select>`
+    const sel = nav.querySelector('#categorySelect')
+    if (sel){ sel.addEventListener('change',()=>{ const v = sel.value; this.loadProducts(v==='all'?null:v) }) }
+  },
   renderProducts(){ const grid = document.getElementById('productsGrid'); const empty = document.getElementById('emptyState'); if (!grid) return; if (!this.products.length){ grid.innerHTML=''; if (empty) empty.style.display='grid'; return } if (empty) empty.style.display='none';
     const cls = this.view==='list' ? 'products-list' : ''
     grid.className = `products-grid ${cls}`

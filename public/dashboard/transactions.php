@@ -123,54 +123,56 @@ require_once 'includes/header.php';
                 </div>
             </div>
 
-            <!-- Filter Chips - Horizontal Layout -->
-            <div style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding: 1rem; background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            <!-- Filter Bar -->
+            <div data-mobile-filter-bar style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding: 1rem; background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                 <span style="font-weight: 600; color: #374151; font-size: 0.875rem; display: flex; align-items: center; gap: 0.5rem;">
                     <i class="fas fa-filter"></i> Filters:
                 </span>
                 
-                <input type="text" id="searchInput" placeholder="🔍 Search transaction, customer..." style="padding: 0.5rem 0.75rem; border: 2px solid #e5e7eb; border-radius: 20px; font-size: 0.875rem; min-width: 250px; transition: all 0.2s;">
-                
-                <select id="statusFilter" class="filter-chip-select">
-                    <option value="">✓ All Status</option>
-                    <option value="completed">✓ Completed</option>
-                    <option value="pending">⏳ Pending</option>
-                    <option value="cancelled">✗ Cancelled</option>
-                </select>
-                
-                <select id="paymentFilter" class="filter-chip-select">
-                    <option value="">💳 All Methods</option>
-                    <option value="cash">💵 Cash</option>
-                    <option value="card">💳 Card</option>
-                    <option value="qris">📱 QRIS</option>
-                    <option value="transfer">🏦 Transfer</option>
-                </select>
-                <div style="display:flex; gap:.5rem; align-items:center;">
-                    <span style="font-size:.8rem; color:#6b7280;">Source:</span>
-                    <div id="sourceTabs" style="display:flex; gap:.25rem;">
-                        <button class="status-tab-btn active" id="tabSourceAll" data-source="all"><i class="fas fa-layer-group"></i> All</button>
-                        <button class="status-tab-btn" id="tabSourcePos" data-source="pos"><i class="fas fa-store"></i> POS</button>
-                        <button class="status-tab-btn" id="tabSourceShop" data-source="shop"><i class="fas fa-shopping-cart"></i> Shop</button>
+                <input type="text" id="searchInput" placeholder="🔍 Search transaction, customer..." style="padding: 0.5rem 0.75rem; border: 2px solid #e5e7eb; border-radius: 20px; font-size: 0.875rem; min-width: 250px; transition: all 0.2s; flex:1;">
+
+                <div data-chips-scroll style="display:flex; gap:.5rem; align-items:center; flex-wrap:nowrap; width:100%;">
+                    <select id="statusFilter" class="filter-chip-select">
+                        <option value="">✓ All Status</option>
+                        <option value="completed">✓ Completed</option>
+                        <option value="pending">⏳ Pending</option>
+                        <option value="cancelled">✗ Cancelled</option>
+                    </select>
+                    
+                    <select id="paymentFilter" class="filter-chip-select">
+                        <option value="">💳 All Methods</option>
+                        <option value="cash">💵 Cash</option>
+                        <option value="card">💳 Card</option>
+                        <option value="qris">📱 QRIS</option>
+                        <option value="transfer">🏦 Transfer</option>
+                    </select>
+                    <div style="display:flex; gap:.5rem; align-items:center;">
+                        <span style="font-size:.8rem; color:#6b7280;">Source:</span>
+                        <div id="sourceTabs" style="display:flex; gap:.25rem;">
+                            <button class="status-tab-btn active" id="tabSourceAll" data-source="all"><i class="fas fa-layer-group"></i> All</button>
+                            <button class="status-tab-btn" id="tabSourcePos" data-source="pos"><i class="fas fa-store"></i> POS</button>
+                            <button class="status-tab-btn" id="tabSourceShop" data-source="shop"><i class="fas fa-shopping-cart"></i> Shop</button>
+                        </div>
+                    </div>
+                    
+                    <select id="dateRangeQuick" class="filter-chip-select">
+                        <option value="">📅 All Time</option>
+                        <option value="today">📅 Today</option>
+                        <option value="yesterday">📅 Yesterday</option>
+                        <option value="week">📅 This Week</option>
+                        <option value="month">📅 This Month</option>
+                        <option value="custom">📅 Custom Range</option>
+                    </select>
+                    
+                    <button class="btn btn-sm btn-secondary" onclick="transactionManager.clearFilters()" style="border-radius: 20px; padding: 0.5rem 1rem; background: #f3f4f6; color: #6b7280; border: none; font-size: 0.875rem; white-space: nowrap;">
+                        <i class="fas fa-times"></i> Clear
+                    </button>
+                    
+                    <div id="activeFiltersCount" style="margin-left: auto; background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%); color: white; padding: 0.375rem 0.875rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: none; white-space: nowrap;">
+                        <i class="fas fa-filter"></i> <span id="filterCount">0</span> active
                     </div>
                 </div>
-                
-                <select id="dateRangeQuick" class="filter-chip-select">
-                    <option value="">📅 All Time</option>
-                    <option value="today">📅 Today</option>
-                    <option value="yesterday">📅 Yesterday</option>
-                    <option value="week">📅 This Week</option>
-                    <option value="month">📅 This Month</option>
-                    <option value="custom">📅 Custom Range</option>
-                </select>
-                
-                <button class="btn btn-sm btn-secondary" onclick="transactionManager.clearFilters()" style="border-radius: 20px; padding: 0.5rem 1rem; background: #f3f4f6; color: #6b7280; border: none; font-size: 0.875rem;">
-                    <i class="fas fa-times"></i> Clear
-                </button>
-                
-                <div id="activeFiltersCount" style="margin-left: auto; background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%); color: white; padding: 0.375rem 0.875rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: none;">
-                    <i class="fas fa-filter"></i> <span id="filterCount">0</span> active
-        </div>
-    </div>
+            </div>
 
             <!-- Custom Date Range (Hidden by default) -->
             <div id="customDateRange" style="margin-bottom: 1.5rem; padding: 1rem; background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: none;">
@@ -270,7 +272,7 @@ require_once 'includes/header.php';
                         <i class="fas fa-chart-bar"></i> Revenue Analytics
                     </h3>
                 </div>
-                <div class="card-body">
+                <div class="card-body" data-chips-scroll>
                     <canvas id="revenueChart" style="max-height: 400px;"></canvas>
                 </div>
             </div>
@@ -576,6 +578,13 @@ class TransactionManager {
             : '<span class="badge" style="background:#10b981;">POS</span>';
     }
 
+    getSyncBadge(txn) {
+        if (!txn) return '';
+        if (txn.id) return '';
+        if ((txn.items_count ?? 0) > 0) return '';
+        return '<span class="badge" style="background:#f59e0b;">Belum sinkron</span>';
+    }
+
     addTrendIndicator(elementId, trend) {
         const element = document.getElementById(elementId);
         if (!element || trend === 0) return;
@@ -746,7 +755,7 @@ class TransactionManager {
         tbody.innerHTML = paginatedTransactions.map(txn => `
             <tr style="animation: fadeIn 0.3s ease;">
                 <td style="text-align: center;">
-                    <input type="checkbox" class="transaction-checkbox" data-id="${txn.id}" onchange="transactionManager.toggleSelection(${txn.id})" ${this.selectedTransactions.has(txn.id) ? 'checked' : ''}>
+                    <input type="checkbox" class="transaction-checkbox" ${txn.id ? `data-id="${txn.id}" onchange="transactionManager.toggleSelection(${txn.id})"` : 'disabled'} ${txn.id && this.selectedTransactions.has(txn.id) ? 'checked' : ''}>
                 </td>
                 <td>
                     <span style="font-weight: 600; color: #667eea;">${txn.transaction_number || 'N/A'}</span>
@@ -772,31 +781,41 @@ class TransactionManager {
                     <div style="display:flex; align-items:center; justify-content:center; gap:.5rem;">
                         ${this.getPaymentIcon(txn.payment_method)}
                         ${this.getSourceBadgeFromTxn(txn)}
+                        ${this.getSyncBadge(txn)}
                     </div>
                 </td>
                 <td style="text-align: center;">
                     ${this.getStatusBadge(txn.status)}
                 </td>
                 <td style="text-align: center;">
-                    <div class="table-actions-dropdown" id="dropdown-${txn.id}">
-                        <button class="table-actions-btn" ${!txn.id ? 'disabled' : ''} onclick="${!txn.id ? '' : `transactionManager.toggleActionsMenu(${txn.id})`}">
+                    <div class="table-actions-dropdown" id="dropdown-${txn.id ?? ('ord-' + (txn.transaction_number || ''))}">
+                        <button class="table-actions-btn" onclick="transactionManager.toggleActionsMenu('${txn.id ?? ('ord-' + (txn.transaction_number || ''))}')">
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
-                        <div class="table-actions-menu" id="menu-${txn.id}">
+                        <div class="table-actions-menu" id="menu-${txn.id ?? ('ord-' + (txn.transaction_number || ''))}">
                             ${!txn.id ? `
-                                <div style="padding:0.5rem 0.75rem; color:#6b7280;">
-                                    <i class="fas fa-info-circle"></i> Order Shop belum tersinkron.
-                                </div>
-                            ` : `
-                                <button class="table-actions-menu-item info" onclick="transactionManager.viewTransaction(${txn.id}); transactionManager.closeActionsMenu(${txn.id})">
+                                <button class="table-actions-menu-item info" onclick="transactionManager.viewTransaction(${txn.id}, '${txn.transaction_number || ''}'); transactionManager.closeActionsMenu('${txn.id ?? ('ord-' + (txn.transaction_number || ''))}')">
                                     <i class="fas fa-eye"></i>
                                     <span>View Details</span>
                                 </button>
-                                <button class="table-actions-menu-item" onclick="transactionManager.viewReceipt(${txn.id}); transactionManager.closeActionsMenu(${txn.id})">
+                                <button class="table-actions-menu-item" onclick="transactionManager.viewReceipt(${txn.id}, '${txn.transaction_number || ''}'); transactionManager.closeActionsMenu('${txn.id ?? ('ord-' + (txn.transaction_number || ''))}')">
                                     <i class="fas fa-receipt"></i>
                                     <span>View Receipt</span>
                                 </button>
-                                <button class="table-actions-menu-item" onclick="transactionManager.printReceipt(${txn.id}); transactionManager.closeActionsMenu(${txn.id})">
+                                <button class="table-actions-menu-item" onclick="transactionManager.printReceipt(${txn.id}, '${txn.transaction_number || ''}'); transactionManager.closeActionsMenu('${txn.id ?? ('ord-' + (txn.transaction_number || ''))}')">
+                                    <i class="fas fa-print"></i>
+                                    <span>Print Receipt</span>
+                                </button>
+                            ` : `
+                                <button class="table-actions-menu-item info" onclick="transactionManager.viewTransaction(${txn.id}, '${txn.transaction_number || ''}'); transactionManager.closeActionsMenu('${txn.id ?? ('ord-' + (txn.transaction_number || ''))}')">
+                                    <i class="fas fa-eye"></i>
+                                    <span>View Details</span>
+                                </button>
+                                <button class="table-actions-menu-item" onclick="transactionManager.viewReceipt(${txn.id}, '${txn.transaction_number || ''}'); transactionManager.closeActionsMenu('${txn.id ?? ('ord-' + (txn.transaction_number || ''))}')">
+                                    <i class="fas fa-receipt"></i>
+                                    <span>View Receipt</span>
+                                </button>
+                                <button class="table-actions-menu-item" onclick="transactionManager.printReceipt(${txn.id}, '${txn.transaction_number || ''}'); transactionManager.closeActionsMenu('${txn.id ?? ('ord-' + (txn.transaction_number || ''))}')">
                                     <i class="fas fa-print"></i>
                                     <span>Print Receipt</span>
                                 </button>
@@ -812,10 +831,10 @@ class TransactionManager {
                                     </button>
                                 ` : ''}
                             `}
+                            </div>
                         </div>
-                    </div>
-            </td>
-        </tr>
+                    </td>
+                </tr>
     `).join('');
 
         this.renderPagination();
@@ -914,14 +933,14 @@ class TransactionManager {
                     </div>
                     <div class="customer-mobile-card-row">
                         <span class="customer-mobile-card-label"><i class="fas fa-credit-card"></i> Payment</span>
-                        <span class="customer-mobile-card-value" style="display:flex; align-items:center; gap:.5rem;">${this.getPaymentIcon(txn.payment_method)} ${this.getSourceBadgeFromTxn(txn)}</span>
+                        <span class="customer-mobile-card-value" style="display:flex; align-items:center; gap:.5rem;">${this.getPaymentIcon(txn.payment_method)} ${this.getSourceBadgeFromTxn(txn)} ${this.getSyncBadge(txn)}</span>
                     </div>
                 </div>
                 <div class="customer-mobile-card-actions">
-                    <button class="btn btn-sm btn-primary" onclick="transactionManager.viewTransaction(${txn.id})">
+                    <button class="btn btn-sm btn-primary" onclick="transactionManager.viewTransaction(${txn.id || 'null'}, '${txn.transaction_number || ''}')">
                         <i class="fas fa-eye"></i> View
                     </button>
-                    <button class="btn btn-sm btn-secondary" onclick="transactionManager.printReceipt(${txn.id})">
+                    <button class="btn btn-sm btn-secondary" onclick="transactionManager.printReceipt(${txn.id || 'null'}, '${txn.transaction_number || ''}')">
                         <i class="fas fa-print"></i> Print
                     </button>
                 </div>
@@ -1138,17 +1157,21 @@ class TransactionManager {
         }, 10);
     }
 
-    async viewTransaction(id) {
-        // Fetch full transaction details with items from API
+    async viewTransaction(id, number = '') {
         try {
-            const response = await app.apiCall(`../api.php?controller=transaction&action=get&id=${id}`);
-            if (!response.success) {
-                throw new Error(response.error || 'Failed to load transaction');
+            let transaction = null;
+            if (id && !isNaN(Number(id)) && Number(id) > 0) {
+                const response = await app.apiCall(`../api.php?controller=transaction&action=get&id=${Number(id)}`);
+                if (!response.success) { throw new Error(response.error || 'Failed to load transaction'); }
+                transaction = response.data;
+            } else if (number) {
+                const res = await app.apiCall(`../api.php?controller=transaction&action=resolveByNumber&transaction_number=${encodeURIComponent(number)}`);
+                if (!res.success) { throw new Error(res.error || 'Failed to resolve transaction'); }
+                transaction = res.data;
+            } else {
+                throw new Error('Transaction reference not available');
             }
-            
-            const transaction = response.data;
             this.renderTransactionModal(transaction);
-            
         } catch (error) {
             console.error('Error loading transaction:', error);
             app.showToast('Failed to load transaction details', 'error');
@@ -1268,13 +1291,43 @@ class TransactionManager {
         document.getElementById('viewReceiptBtn').onclick = () => this.viewReceipt(transaction.id);
     }
 
-    viewReceipt(id) {
-        window.open(`receipt.php?id=${id}`, '_blank', 'width=400,height=600');
+    async viewReceipt(id, number = '') {
+        const target = window.open('about:blank', '_blank', 'width=400,height=600');
+        try {
+            let txId = null;
+            if (id && !isNaN(Number(id)) && Number(id) > 0) {
+                txId = Number(id);
+            } else if (number) {
+                const res = await app.apiCall(`../api.php?controller=transaction&action=resolveByNumber&transaction_number=${encodeURIComponent(number)}`);
+                if (!res.success) { throw new Error(res.error || 'Failed to resolve transaction'); }
+                txId = Number(res.data.id);
+            }
+            if (!txId) { showToast('Receipt tidak tersedia untuk transaksi ini', 'warning'); if (target) target.close(); return; }
+            if (target) { target.location.href = `receipt.php?id=${txId}`; } else { window.open(`receipt.php?id=${txId}`, '_blank'); }
+        } catch (e) {
+            if (target) target.close();
+            showToast(e.message || 'Gagal membuka receipt', 'error');
+        }
     }
 
-    printReceipt(id) {
-        window.open(`receipt.php?id=${id}&print=1`, '_blank');
-        showToast('Opening receipt for printing...', 'info');
+    async printReceipt(id, number = '') {
+        const target = window.open('about:blank', '_blank');
+        try {
+            let txId = null;
+            if (id && !isNaN(Number(id)) && Number(id) > 0) {
+                txId = Number(id);
+            } else if (number) {
+                const res = await app.apiCall(`../api.php?controller=transaction&action=resolveByNumber&transaction_number=${encodeURIComponent(number)}`);
+                if (!res.success) { throw new Error(res.error || 'Failed to resolve transaction'); }
+                txId = Number(res.data.id);
+            }
+            if (!txId) { showToast('Tidak dapat mencetak: transaksi belum tersedia', 'error'); if (target) target.close(); return; }
+            if (target) { target.location.href = `receipt.php?id=${txId}&print=1`; } else { window.open(`receipt.php?id=${txId}&print=1`, '_blank'); }
+            showToast('Opening receipt for printing...', 'info');
+        } catch (e) {
+            if (target) target.close();
+            showToast(e.message || 'Gagal mencetak receipt', 'error');
+        }
     }
 
     showCancelModal(id) {
@@ -1450,15 +1503,85 @@ class TransactionManager {
         
         const formatIcons = {
             csv: 'fa-file-csv',
-            excel: 'fa-file-excel',
+            excel: 'fa-file-excel', 
             pdf: 'fa-file-pdf'
         };
         
         showToast(`Exporting ${this.filteredTransactions.length} transactions as ${format.toUpperCase()}...`, 'info');
         
+        // Build export URL with all current filters
+        let exportUrl = `../api.php?controller=transaction&action=export&format=${format}`;
+        
+        // Add search query if active
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput && searchInput.value) {
+            exportUrl += `&search=${encodeURIComponent(searchInput.value)}`;
+        }
+        
+        // Add status filter if active
+        const statusFilter = document.getElementById('statusFilter');
+        if (statusFilter && statusFilter.value) {
+            exportUrl += `&status=${encodeURIComponent(statusFilter.value)}`;
+        }
+        
+        // Add payment filter if active
+        const paymentFilter = document.getElementById('paymentFilter');
+        if (paymentFilter && paymentFilter.value) {
+            exportUrl += `&payment_method=${encodeURIComponent(paymentFilter.value)}`;
+        }
+        
+        // Add source filter if active
+        if (this.currentSource && this.currentSource !== 'all') {
+            exportUrl += `&source=${encodeURIComponent(this.currentSource)}`;
+        }
+        
+        // Add date range filter if active
+        const dateRangeQuick = document.getElementById('dateRangeQuick');
+        if (dateRangeQuick && dateRangeQuick.value) {
+            if (dateRangeQuick.value === 'custom') {
+                // Add custom date range
+                const dateFrom = document.getElementById('dateFrom');
+                const dateTo = document.getElementById('dateTo');
+                if (dateFrom && dateFrom.value && dateTo && dateTo.value) {
+                    exportUrl += `&date_from=${encodeURIComponent(dateFrom.value)}&date_to=${encodeURIComponent(dateTo.value)}`;
+                }
+            } else {
+                // Add quick date range
+                const now = new Date();
+                let dateFrom, dateTo;
+                
+                switch(dateRangeQuick.value) {
+                    case 'today':
+                        dateFrom = dateTo = now.toISOString().split('T')[0];
+                        break;
+                    case 'yesterday':
+                        const yesterday = new Date(now);
+                        yesterday.setDate(yesterday.getDate() - 1);
+                        dateFrom = dateTo = yesterday.toISOString().split('T')[0];
+                        break;
+                    case 'week':
+                        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                        dateFrom = weekAgo.toISOString().split('T')[0];
+                        dateTo = now.toISOString().split('T')[0];
+                        break;
+                    case 'month':
+                        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                        dateFrom = monthAgo.toISOString().split('T')[0];
+                        dateTo = now.toISOString().split('T')[0];
+                        break;
+                }
+                
+                if (dateFrom && dateTo) {
+                    exportUrl += `&date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}`;
+                }
+            }
+        }
+        
+        console.log('Export URL:', exportUrl);
+        
         // In production, call API endpoint
         setTimeout(() => {
-            window.location.href = `../api.php?controller=transaction&action=export&format=${format}`;
+            window.location.href = exportUrl;
         }, 500);
     }
 
@@ -1824,3 +1947,4 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 
 <?php require_once 'includes/footer.php'; ?>
+<script src="../assets/js/mobile-ui.js"></script>

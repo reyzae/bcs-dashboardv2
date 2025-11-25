@@ -175,7 +175,7 @@ class ProductManager {
         }
 
         tbody.innerHTML = this.products.map(product => {
-            const isLowStock = product.stock_quantity <= product.min_stock_level;
+            const isLowStock = product.stock_quantity < product.min_stock_level;
             const stockStatus = isLowStock ? 'low-stock' : 'in-stock';
             const stockColor = isLowStock ? '#ef4444' : '#10b981';
             const isInactive = !product.is_active || product.is_active == 0;
@@ -445,7 +445,7 @@ class ProductManager {
             document.getElementById('productPrice').value = product.unit_price || 0;
             document.getElementById('productCostPrice').value = product.cost_price || 0;
             document.getElementById('productStock').value = product.stock_quantity || 0;
-            document.getElementById('productMinStock').value = product.min_stock_level || 10;
+            document.getElementById('productMinStock').value = product.min_stock_level || 3;
             document.getElementById('productUnit').value = product.unit || 'pcs';
             document.getElementById('productActive').checked = product.is_active == 1;
             
@@ -467,7 +467,7 @@ class ProductManager {
     resetForm() {
         document.getElementById('productForm').reset();
         document.getElementById('productActive').checked = true;
-        document.getElementById('productMinStock').value = 10;
+        document.getElementById('productMinStock').value = 3;
         document.getElementById('productUnit').value = 'pcs';
         this.currentProductId = null;
         
@@ -495,7 +495,7 @@ class ProductManager {
             unit_price: parseFloat(document.getElementById('productPrice').value),
             cost_price: parseFloat(document.getElementById('productCostPrice').value) || 0,
             stock_quantity: parseInt(document.getElementById('productStock').value),
-            min_stock_level: parseInt(document.getElementById('productMinStock').value) || 10,
+            min_stock_level: parseInt(document.getElementById('productMinStock').value) || 3,
             unit: document.getElementById('productUnit').value.trim() || 'pcs',
             is_active: document.getElementById('productActive').checked ? 1 : 0
         };
@@ -655,6 +655,48 @@ class ProductManager {
         } finally {
             if (btn) { btn.disabled = false; btn.innerHTML = originalHtml; }
         }
+    }
+    
+    // Export functionality
+    toggleExportMenu() {
+        const menu = document.getElementById('exportMenu');
+        if (menu) {
+            menu.classList.toggle('show');
+        }
+    }
+    
+    exportData(format) {
+        document.getElementById('exportMenu').classList.remove('show');
+        
+        // Use global showToast function
+        if (typeof showToast === 'function') {
+            showToast(`Exporting ${this.products.length} products as ${format.toUpperCase()}...`, 'info');
+        }
+        
+        // Build export URL with current filters
+        let exportUrl = `../api.php?controller=product&action=export&format=${format}`;
+        
+        // Add search query if active
+        if (this.searchQuery) {
+            exportUrl += `&search=${encodeURIComponent(this.searchQuery)}`;
+        }
+        
+        // Add category filter if active
+        if (this.categoryFilter) {
+            exportUrl += `&category_id=${encodeURIComponent(this.categoryFilter)}`;
+        }
+        
+        // Add status filter if active
+        if (this.statusFilter !== '') {
+            exportUrl += `&status=${encodeURIComponent(this.statusFilter)}`;
+        }
+        
+        console.log('Export URL:', exportUrl);
+        
+        // Trigger download
+        setTimeout(() => {
+            window.location.href = exportUrl;
+        }, 500);
     }
 }
 

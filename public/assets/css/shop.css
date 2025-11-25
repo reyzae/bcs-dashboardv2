@@ -909,18 +909,13 @@ body.shop-theme {
   color: var(--gray-700); 
   border-bottom: 1px solid var(--gray-200);
   box-shadow: var(--shadow-sm);
+  position: relative;
 }
 
-.header-menu a { 
-  color: var(--gray-700); 
-  text-decoration: none; 
-  padding: var(--space-2) var(--space-3); 
-  border-radius: var(--radius); 
-  background: var(--gray-100); 
-  font-weight: 500;
-  transition: all var(--transition-fast);
-  position: relative;
-  overflow: hidden;
+/* Dropdown kategori di header */
+.category-select {
+  width: 100%;
+  max-width: 420px;
 }
 
 .header-menu a::before {
@@ -953,6 +948,18 @@ body.shop-theme {
 
 .header-menu a.active:hover {
   background: var(--primary-200);
+}
+
+/* Hilangkan dekorasi scroll khusus chips karena kini dropdown */
+
+@media (min-width: 769px) {
+  .header-menu {
+    flex-wrap: nowrap;
+  }
+}
+
+@media (max-width: 768px) {
+  .category-select { max-width: 100%; }
 }
 
 .search-bar { 

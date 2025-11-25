@@ -166,5 +166,34 @@ class CategoryController extends BaseController {
         $stats = $this->categoryModel->getStats();
         $this->sendSuccess($stats);
     }
+
+    public function deduplicate() {
+        $this->requireRole(['admin','manager']);
+        $sql = "SELECT id, name FROM categories WHERE is_active = 1 ORDER BY name, id";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute();
+        $rows = $stmt->fetchAll();
+        $groups = [];
+        foreach ($rows as $r) {
+            $key = strtolower(trim(preg_replace('/\s+/', ' ', $r['name'])));
+            if (!isset($groups[$key])) { $groups[$key] = []; }
+            $groups[$key][] = (int)$r['id'];
+        }
+        $changes = [];
+        foreach ($groups as $key => $ids) {
+            if (count($ids) < 2) { continue; }
+            sort($ids);
+            $primary = $ids[0];
+            $dups = array_slice($ids, 1);
+            foreach ($dups as $dupId) {
+                $u1 = $this->pdo->prepare("UPDATE products SET category_id = ? WHERE category_id = ?");
+                $u1->execute([$primary, $dupId]);
+                $u2 = $this->pdo->prepare("UPDATE categories SET is_active = 0 WHERE id = ?");
+                $u2->execute([$dupId]);
+                $changes[] = ['primary' => $primary, 'removed' => $dupId];
+            }
+        }
+        $this->sendSuccess(['changes' => $changes]);
+    }
 }
 

@@ -39,6 +39,28 @@ require_once 'includes/header.php';
                 <i class="fas fa-sync"></i>
                 Refresh
             </button>
+            
+            <!-- Export Dropdown -->
+            <div class="table-actions-dropdown" id="exportDropdown">
+                <button class="btn btn-success btn-sm" onclick="productManager.toggleExportMenu()">
+                    <i class="fas fa-download"></i> Export <i class="fas fa-chevron-down" style="margin-left: 0.25rem; font-size: 0.75rem;"></i>
+                </button>
+                <div class="table-actions-menu" id="exportMenu" style="right: 0;">
+                    <button class="table-actions-menu-item" onclick="productManager.exportData('csv')">
+                        <i class="fas fa-file-csv"></i>
+                        <span>Export as CSV</span>
+                    </button>
+                    <button class="table-actions-menu-item" onclick="productManager.exportData('excel')">
+                        <i class="fas fa-file-excel"></i>
+                        <span>Export as Excel</span>
+                    </button>
+                    <button class="table-actions-menu-item" onclick="productManager.exportData('pdf')">
+                        <i class="fas fa-file-pdf"></i>
+                        <span>Export as PDF</span>
+                    </button>
+                </div>
+            </div>
+            
             <button class="btn btn-primary btn-sm" id="addProductBtn">
                 <i class="fas fa-plus"></i>
                 <span>Add Product</span>
@@ -143,7 +165,7 @@ require_once 'includes/header.php';
                                 <label for="productMinStock" class="form-label" style="font-size: 0.875rem; font-weight: 500;">
                                     <i class="fas fa-exclamation-triangle" style="color: #f59e0b;"></i> Min. Stock Level
                                 </label>
-                                <input type="number" id="productMinStock" class="form-input" placeholder="10" min="0" value="10">
+                                <input type="number" id="productMinStock" class="form-input" placeholder="3" min="0" value="3">
                             </div>
                             <div class="form-group">
                                 <label for="productUnit" class="form-label" style="font-size: 0.875rem; font-weight: 500;">

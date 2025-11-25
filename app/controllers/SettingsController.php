@@ -173,7 +173,7 @@ class SettingsController extends BaseController {
             'date_format' => 'd/m/Y',
             'company_name' => 'Bytebalok',
             'company_email' => 'info@bytebalok.com',
-            'company_phone' => '+62 21 1234 5678',
+            'company_phone' => '+6285121010199',
             'company_address' => 'Jl. Example No. 123, Jakarta',
             'company_website' => 'https://bytebalok.com',
             'tax_number' => '',
@@ -190,7 +190,9 @@ class SettingsController extends BaseController {
             'force_strong_password' => '1',
             'enable_activity_log' => '1',
             'debug_mode' => '0',
-            'performance_monitoring' => '0'
+            'performance_monitoring' => '0',
+            'brand_primary_color' => '#16a34a',
+            'brand_logo' => ''
         ];
     }
     
@@ -337,7 +339,7 @@ class SettingsController extends BaseController {
             'date_format' => 'd/m/Y',
             'company_name' => 'Bytebalok',
             'company_email' => 'info@bytebalok.com',
-            'company_phone' => '+62 21 1234 5678',
+            'company_phone' => '+6285121010199',
             'company_address' => 'Jl. Example No. 123, Jakarta',
             'enable_barcode_scanner' => '1',
             'auto_print_receipt' => '0',
@@ -352,10 +354,54 @@ class SettingsController extends BaseController {
             'force_strong_password' => '1',
             'enable_activity_log' => '1',
             'debug_mode' => '0',
-            'performance_monitoring' => '0'
+            'performance_monitoring' => '0',
+            'brand_primary_color' => '#16a34a',
+            'brand_logo' => ''
         ];
         
         return $defaults[$key] ?? '';
+    }
+
+    /**
+     * Upload brand logo and store setting
+     */
+    public function uploadLogo() {
+        try {
+            $this->checkAuthentication();
+            if ($this->user['role'] !== 'admin') {
+                $this->sendError('Unauthorized. Admin access required.', 403);
+                return;
+            }
+            if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
+                $this->sendError('No file uploaded', 400);
+                return;
+            }
+            $file = $_FILES['file'];
+            $allowed = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/svg+xml' => 'svg'];
+            $mime = mime_content_type($file['tmp_name']);
+            if (!isset($allowed[$mime])) {
+                $this->sendError('Unsupported file type', 415);
+                return;
+            }
+            $ext = $allowed[$mime];
+            $targetDir = dirname(__DIR__, 2) . '/public/assets/img/branding';
+            if (!is_dir($targetDir)) { @mkdir($targetDir, 0777, true); }
+            $filename = 'brand-logo.' . $ext;
+            $target = $targetDir . '/' . $filename;
+            if (!move_uploaded_file($file['tmp_name'], $target)) {
+                $this->sendError('Failed to save file', 500);
+                return;
+            }
+            $relative = 'assets/img/branding/' . $filename;
+            if (!$this->tableExists('settings')) { $this->ensureSettingsTable(); }
+            $sql = "INSERT INTO settings(`key`,`value`,`type`,`description`,`updated_at`) VALUES(?, ?, 'string', NULL, NOW()) 
+                    ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), updated_at = NOW()";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute(['brand_logo', $relative]);
+            $this->sendSuccess(['path' => $relative], 'Brand logo updated');
+        } catch (Exception $e) {
+            $this->sendError('Upload failed: ' . $e->getMessage(), 500);
+        }
     }
 
     /**
@@ -448,6 +494,9 @@ switch ($action) {
     case 'get_public_banks':
         // Public bank settings endpoint (no auth)
         $settingsController->get_public_banks();
+        break;
+    case 'upload_logo':
+        $settingsController->uploadLogo();
         break;
     default:
         $settingsController->sendError('Invalid action', 400);
