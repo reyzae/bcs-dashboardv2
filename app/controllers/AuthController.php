@@ -48,6 +48,7 @@ class AuthController extends BaseController {
             }
             // Initialize session activity timestamp
             $_SESSION['last_activity'] = time();
+            $_SESSION['user_name'] = $user['full_name'];
             
             // Handle Remember Me: issue persistent token cookie
             if ($remember) {
@@ -216,7 +217,7 @@ class AuthController extends BaseController {
         ];
         
         // Check if email is being changed and if it already exists
-        if (isset($data['email']) && $data['email'] !== $_SESSION['email']) {
+        if (isset($data['email']) && $data['email'] !== ($_SESSION['user_email'] ?? null)) {
             if ($this->userModel->emailExists($data['email'], $_SESSION['user_id'])) {
                 $this->sendError('Email already exists', 400);
             }
@@ -226,6 +227,14 @@ class AuthController extends BaseController {
         $success = $this->userModel->update($_SESSION['user_id'], $updateData);
         
         if ($success) {
+            if (session_status() === PHP_SESSION_NONE) { session_start(); }
+            if (isset($updateData['full_name']) && !empty($updateData['full_name'])) {
+                $_SESSION['full_name'] = $updateData['full_name'];
+                $_SESSION['user_name'] = $updateData['full_name'];
+            }
+            if (isset($updateData['email']) && !empty($updateData['email'])) {
+                $_SESSION['user_email'] = $updateData['email'];
+            }
             $this->logAction('update_profile', 'users', $_SESSION['user_id'], $oldUser, $updateData);
             $this->sendSuccess(null, 'Profile updated successfully');
         } else {
@@ -251,11 +260,7 @@ class AuthController extends BaseController {
         $this->requireAdmin();
         
         try {
-            $stmt = $this->pdo->query("
-                SELECT id, username, full_name, email, role, is_active, created_at, updated_at
-                FROM users
-                ORDER BY created_at DESC
-            ");
+            $stmt = $this->pdo->query("\n                SELECT id, username, full_name, email, role, is_active, created_at, updated_at\n                FROM users\n                ORDER BY created_at DESC\n            ");
             
             $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
@@ -291,11 +296,7 @@ class AuthController extends BaseController {
         }
         
         try {
-            $stmt = $this->pdo->prepare("
-                SELECT id, username, full_name, email, role, is_active, created_at, updated_at
-                FROM users
-                WHERE id = ?
-            ");
+            $stmt = $this->pdo->prepare("\n                SELECT id, username, full_name, email, role, is_active, created_at, updated_at\n                FROM users\n                WHERE id = ?\n            ");
             
             $stmt->execute([$userId]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -338,11 +339,7 @@ class AuthController extends BaseController {
             $adminCount = $stmt->fetchColumn();
             
             // Users by role
-            $stmt = $this->pdo->query("
-                SELECT role, COUNT(*) as count
-                FROM users
-                GROUP BY role
-            ");
+            $stmt = $this->pdo->query("\n                SELECT role, COUNT(*) as count\n                FROM users\n                GROUP BY role\n            ");
             $usersByRole = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
             $this->sendSuccess([
@@ -405,10 +402,7 @@ class AuthController extends BaseController {
             $isActive = isset($data['status']) && $data['status'] === 'active' ? 1 : 0;
             
             // Insert user
-            $stmt = $this->pdo->prepare("
-                INSERT INTO users (username, password, full_name, email, role, is_active, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, NOW())
-            ");
+            $stmt = $this->pdo->prepare("\n                INSERT INTO users (username, password, full_name, email, role, is_active, created_at)\n                VALUES (?, ?, ?, ?, ?, ?, NOW())\n            ");
             
             $stmt->execute([
                 $data['username'],
@@ -489,12 +483,7 @@ class AuthController extends BaseController {
                 
                 $hashedPassword = password_hash($data['password'], PASSWORD_DEFAULT);
                 
-                $stmt = $this->pdo->prepare("
-                    UPDATE users
-                    SET username = ?, password = ?, full_name = ?, email = ?, 
-                        role = ?, is_active = ?, updated_at = NOW()
-                    WHERE id = ?
-                ");
+                $stmt = $this->pdo->prepare("\n                    UPDATE users\n                    SET username = ?, password = ?, full_name = ?, email = ?, \n                        role = ?, is_active = ?, updated_at = NOW()\n                    WHERE id = ?\n                ");
                 
                 $stmt->execute([
                     $data['username'],
@@ -507,12 +496,7 @@ class AuthController extends BaseController {
                 ]);
             } else {
                 // Update without changing password
-                $stmt = $this->pdo->prepare("
-                    UPDATE users
-                    SET username = ?, full_name = ?, email = ?, 
-                        role = ?, is_active = ?, updated_at = NOW()
-                    WHERE id = ?
-                ");
+                $stmt = $this->pdo->prepare("\n                    UPDATE users\n                    SET username = ?, full_name = ?, email = ?, \n                        role = ?, is_active = ?, updated_at = NOW()\n                    WHERE id = ?\n                ");
                 
                 $stmt->execute([
                     $data['username'],
@@ -611,11 +595,7 @@ class AuthController extends BaseController {
             $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
             
             // Update password
-            $stmt = $this->pdo->prepare("
-                UPDATE users
-                SET password = ?, updated_at = NOW()
-                WHERE id = ?
-            ");
+            $stmt = $this->pdo->prepare("\n                UPDATE users\n                SET password = ?, updated_at = NOW()\n                WHERE id = ?\n            ");
             
             $stmt->execute([$hashedPassword, $userId]);
             

@@ -105,6 +105,7 @@ if (!isset($_SESSION['user_id']) && isset($_COOKIE['remember_me'])) {
                     $_SESSION['user_role'] = $user['role'] ?? null;
                     $_SESSION['username'] = $user['username'] ?? null;
                     $_SESSION['full_name'] = $user['full_name'] ?? null;
+                    $_SESSION['user_name'] = $user['full_name'] ?? null;
                     $_SESSION['user_email'] = $user['email'] ?? null;
                     $_SESSION['last_activity'] = time();
                 }
