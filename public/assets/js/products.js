@@ -19,15 +19,15 @@ class ProductManager {
 
     async init() {
         console.log('🚀 Initializing Product Manager...');
-        
+
         // Load data
         await this.loadCategories();
         await this.loadProducts();
-        
+
         // Setup
         this.setupEventListeners();
         this.setupKeyboardShortcuts();
-        
+
         console.log('✅ Product Manager Ready!');
     }
 
@@ -35,7 +35,7 @@ class ProductManager {
         try {
             console.log('📁 Loading categories...');
             const response = await app.apiCall('../api.php?controller=category&action=getActive');
-            
+
             if (response.success) {
                 this.categories = response.data || [];
                 this.renderCategoryFilters();
@@ -52,11 +52,11 @@ class ProductManager {
     renderCategoryFilters() {
         const filterSelect = document.getElementById('categoryFilter');
         const modalSelect = document.getElementById('productCategory');
-        
-        const options = this.categories.map(cat => 
+
+        const options = this.categories.map(cat =>
             `<option value="${cat.id}">${cat.name}</option>`
         ).join('');
-        
+
         if (filterSelect) filterSelect.innerHTML = '<option value="">All Categories</option>' + options;
         if (modalSelect) modalSelect.innerHTML = '<option value="">Select category...</option>' + options;
     }
@@ -64,15 +64,23 @@ class ProductManager {
     async loadProducts() {
         const tbody = document.querySelector('#productsTable tbody');
         const loadingRow = document.getElementById('loadingRow');
-        
+        const mobileView = document.getElementById('mobileProductsView');
+
         try {
             console.log('📦 Loading products...');
-            
+
             // Show loading state
             if (loadingRow) {
                 loadingRow.style.display = 'table-row';
             }
-            
+
+            // Show mobile skeleton loading
+            if (mobileView && window.innerWidth <= 768) {
+                mobileView.innerHTML = this.renderMobileSkeletons(5);
+                mobileView.style.display = 'block';
+                document.querySelector('.table-container').style.display = 'none';
+            }
+
             // Build API URL
             let url = `../api.php?controller=product&action=list&page=${this.currentPage}&limit=${this.itemsPerPage}&t=${Date.now()}`;
             if (this.searchQuery) url += `&search=${encodeURIComponent(this.searchQuery)}`;
@@ -82,47 +90,47 @@ class ProductManager {
             console.log('📍 API URL:', url);
 
             const response = await app.apiCall(url);
-            
+
             console.log('📦 Products Response:', response);
-            
+
             // Hide loading row
             if (loadingRow) {
                 loadingRow.style.display = 'none';
             }
-            
+
             if (response.success && response.data) {
                 this.products = response.data.products || response.data || [];
-                
+
                 // Debug: Show first product to check image field
                 if (this.products.length > 0) {
                     console.log('🔍 Sample product data:', this.products[0]);
                 }
-                
+
                 this.renderProducts();
-                
+
                 if (response.data.pagination) {
                     this.renderPagination(response.data.pagination);
                 }
-                
+
                 // Update total count badge
                 const totalCount = response.data.pagination?.total || this.products.length;
                 const countBadge = document.getElementById('totalProductsCount');
                 if (countBadge) {
                     countBadge.textContent = totalCount;
                 }
-                
+
                 console.log(`✅ Loaded ${this.products.length} products`);
             } else {
                 throw new Error(response.message || 'Failed to load products');
             }
         } catch (error) {
             console.error('❌ Failed to load products:', error);
-            
+
             // Hide loading row
             if (loadingRow) {
                 loadingRow.style.display = 'none';
             }
-            
+
             // Show error in table
             tbody.innerHTML = `
                 <tr>
@@ -136,31 +144,72 @@ class ProductManager {
                     </td>
                 </tr>
             `;
-            
+
             app.showToast('Failed to load products. Please try again.', 'error');
         }
     }
 
+    updateQuickStats() {
+        const total = this.products.length;
+        const active = this.products.filter(p => p.is_active == 1).length;
+        const lowStock = this.products.filter(p => p.stock_quantity < p.min_stock_level).length;
+
+        // Update stats in header
+        const statsTotal = document.getElementById('statsTotal');
+        const statsActive = document.getElementById('statsActive');
+        const statsLowStock = document.getElementById('statsLowStock');
+
+        if (statsTotal) statsTotal.textContent = total;
+        if (statsActive) statsActive.textContent = active;
+        if (statsLowStock) statsLowStock.textContent = lowStock;
+    }
+
+    renderMobileSkeletons(count = 5) {
+        let html = '';
+        for (let i = 0; i < count; i++) {
+            html += `
+                <div class="mobile-card-skeleton">
+                    <div class="skeleton-header">
+                        <div class="skeleton-image"></div>
+                        <div class="skeleton-text" style="flex: 1;">
+                            <div class="skeleton-line short"></div>
+                            <div class="skeleton-line medium"></div>
+                        </div>
+                    </div>
+                    <div class="skeleton-line long"></div>
+                    <div class="skeleton-line medium"></div>
+                    <div class="skeleton-line short"></div>
+                    <div class="skeleton-footer">
+                        <div class="skeleton-button"></div>
+                        <div class="skeleton-button"></div>
+                    </div>
+                </div>
+            `;
+        }
+        return html;
+    }
+
     renderProducts() {
         const tbody = document.querySelector('#productsTable tbody');
-        
+        const mobileView = document.getElementById('mobileProductsView');
+
         console.log('🎨 RENDER PRODUCTS - Total:', this.products.length);
         if (this.products.length > 0) {
             console.log('🔍 First product sample:', this.products[0]);
             console.log('🖼️ First product image field:', this.products[0].image);
         }
-        
+
         if (this.products.length === 0) {
-            tbody.innerHTML = `
+            const emptyStateHTML = `
                 <tr>
                     <td colspan="8" style="text-align: center; padding: 4rem 2rem;">
                         <div class="empty-state">
                             <i class="fas fa-box-open" style="font-size: 4rem; color: #d1d5db; margin-bottom: 1.5rem;"></i>
                             <h3 style="color: #6b7280; font-size: 1.25rem; margin-bottom: 0.5rem; font-weight: 600;">No Products Found</h3>
                             <p style="color: #9ca3af; margin-bottom: 1.5rem;">
-                                ${this.searchQuery || this.categoryFilter || this.statusFilter !== '' 
-                                    ? 'Try adjusting your filters or search query' 
-                                    : 'Get started by adding your first product'}
+                                ${this.searchQuery || this.categoryFilter || this.statusFilter !== ''
+                    ? 'Try adjusting your filters or search query'
+                    : 'Get started by adding your first product'}
                             </p>
                             ${!this.searchQuery && !this.categoryFilter && this.statusFilter === '' ? `
                                 <button class="btn btn-primary" onclick="productManager.showProductModal()">
@@ -171,102 +220,207 @@ class ProductManager {
                     </td>
                 </tr>
             `;
+            tbody.innerHTML = emptyStateHTML;
+            if (mobileView) mobileView.innerHTML = emptyStateHTML.replace(/<tr>|<\/tr>|<td[^>]*>|<\/td>/g, '');
             return;
         }
 
-        tbody.innerHTML = this.products.map(product => {
-            const isLowStock = product.stock_quantity < product.min_stock_level;
-            const stockStatus = isLowStock ? 'low-stock' : 'in-stock';
-            const stockColor = isLowStock ? '#ef4444' : '#10b981';
-            const isInactive = !product.is_active || product.is_active == 0;
-            const rowOpacity = isInactive ? '0.5' : '1';
-            const rowBg = isInactive ? '#fef2f2' : 'white';
-            
-            return `
-                <tr class="product-row ${isLowStock ? 'low-stock-row' : ''} ${isInactive ? 'inactive-row' : ''}" 
-                    data-id="${product.id}" 
-                    style="opacity: ${rowOpacity}; background: ${rowBg}; transition: all 0.3s;">
-                    <td>
-                        <div class="product-image-cell" style="width: 60px; height: 60px; border-radius: 8px; overflow: hidden; background: #f3f4f6; display: flex; align-items: center; justify-content: center; position: relative;">
-                        ${product.image ? 
-                                `<img src="../${product.image}" alt="${product.name}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\\'fas fa-image\\' style=\\'color: #d1d5db; font-size: 1.5rem;\\'></i>';">` :
-                                `<i class="fas fa-image" style="color: #d1d5db; font-size: 1.5rem;"></i>`
-                        }
-                        ${isInactive ? `<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(239,68,68,0.2); display: flex; align-items: center; justify-content: center;">
-                            <i class="fas fa-ban" style="color: #ef4444; font-size: 1.5rem;"></i>
-                        </div>` : ''}
+        // Render desktop table view
+        tbody.innerHTML = this.products.map(product => this.renderProductRow(product)).join('');
+
+        // Render mobile card view
+        if (mobileView) {
+            mobileView.innerHTML = this.products.map(product => this.renderProductCard(product)).join('');
+
+            // Show/hide based on screen size
+            if (window.innerWidth <= 768) {
+                mobileView.style.display = 'block';
+                document.querySelector('.table-container').style.display = 'none';
+            } else {
+                mobileView.style.display = 'none';
+                document.querySelector('.table-container').style.display = 'block';
+            }
+        }
+
+        // Update quick stats
+        this.updateQuickStats();
+    }
+
+    renderProductRow(product) {
+        const isLowStock = product.stock_quantity < product.min_stock_level;
+        const stockStatus = isLowStock ? 'low-stock' : 'in-stock';
+        const stockColor = isLowStock ? '#ef4444' : '#10b981';
+        const isInactive = !product.is_active || product.is_active == 0;
+        const rowOpacity = isInactive ? '0.5' : '1';
+        const rowBg = isInactive ? '#fef2f2' : 'white';
+
+        return `
+            <tr class="product-row ${isLowStock ? 'low-stock-row' : ''} ${isInactive ? 'inactive-row' : ''}" 
+                data-id="${product.id}" 
+                style="opacity: ${rowOpacity}; background: ${rowBg}; transition: all 0.3s;">
+                <td>
+                    <div class="product-image-cell" style="width: 60px; height: 60px; border-radius: 8px; overflow: hidden; background: #f3f4f6; display: flex; align-items: center; justify-content: center; position: relative;">
+                    ${product.image ?
+                `<img src="../${product.image}" alt="${product.name}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\\'fas fa-image\\' style=\\'color: #d1d5db; font-size: 1.5rem;\\'></i>';">` :
+                `<i class="fas fa-image" style="color: #d1d5db; font-size: 1.5rem;"></i>`
+            }
+                    ${isInactive ? `<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(239,68,68,0.2); display: flex; align-items: center; justify-content: center;">
+                        <i class="fas fa-ban" style="color: #ef4444; font-size: 1.5rem;"></i>
+                    </div>` : ''}
+                </div>
+            </td>
+            <td>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <div>
+                            <div style="font-weight: 600; color: ${isInactive ? '#6b7280' : '#1f2937'}; margin-bottom: 0.25rem;">
+                                ${product.name}
+                                ${isInactive ? `<span class="badge" style="background: #fee2e2; color: #991b1b; font-size: 0.625rem; padding: 0.125rem 0.5rem; margin-left: 0.5rem; text-transform: uppercase; font-weight: 700;">
+                                    <i class="fas fa-times-circle"></i> INACTIVE
+                                </span>` : ''}
+                            </div>
+                            ${product.description ? `<div style="font-size: 0.875rem; color: #6b7280;">${product.description.substring(0, 50)}${product.description.length > 50 ? '...' : ''}</div>` : ''}
+                        </div>
                     </div>
                 </td>
                 <td>
-                        <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            <div>
-                                <div style="font-weight: 600; color: ${isInactive ? '#6b7280' : '#1f2937'}; margin-bottom: 0.25rem;">
-                                    ${product.name}
-                                    ${isInactive ? `<span class="badge" style="background: #fee2e2; color: #991b1b; font-size: 0.625rem; padding: 0.125rem 0.5rem; margin-left: 0.5rem; text-transform: uppercase; font-weight: 700;">
-                                        <i class="fas fa-times-circle"></i> INACTIVE
-                                    </span>` : ''}
-                                </div>
-                                ${product.description ? `<div style="font-size: 0.875rem; color: #6b7280;">${product.description.substring(0, 50)}${product.description.length > 50 ? '...' : ''}</div>` : ''}
-                            </div>
-                        </div>
-                    </td>
-                    <td>
-                        <span class="badge badge-secondary" style="font-family: monospace; font-size: 0.875rem;">
-                            ${product.sku}
-                        </span>
+                    <span class="badge badge-secondary" style="font-family: monospace; font-size: 0.875rem;">
+                        ${product.sku}
+                    </span>
+            </td>
+                <td>
+                    <span class="badge badge-info">
+                        <i class="fas fa-folder"></i> ${product.category_name || 'Uncategorized'}
+                    </span>
                 </td>
-                    <td>
-                        <span class="badge badge-info">
-                            <i class="fas fa-folder"></i> ${product.category_name || 'Uncategorized'}
-                        </span>
-                    </td>
-                    <td style="text-align: right;">
-                        <div style="font-weight: 600; color: ${isInactive ? '#9ca3af' : '#1f2937'};">${app.formatCurrency(product.unit_price)}</div>
-                        ${product.cost_price ? `<div style="font-size: 0.75rem; color: #9ca3af;">Cost: ${app.formatCurrency(product.cost_price)}</div>` : ''}
-                    </td>
-                    <td style="text-align: center;">
-                        <div style="display: inline-flex; flex-direction: column; align-items: center; gap: 0.25rem;">
-                            <span style="font-weight: 700; font-size: 1.125rem; color: ${isInactive ? '#9ca3af' : stockColor};">
-                                ${product.stock_quantity}
-                        </span>
-                            <span style="font-size: 0.75rem; color: #6b7280;">${product.unit || 'pcs'}</span>
-                            ${isLowStock && !isInactive ? `<span class="badge badge-danger" style="font-size: 0.625rem; padding: 0.125rem 0.5rem;">LOW</span>` : ''}
+                <td style="text-align: right;">
+                    <div style="font-weight: 600; color: ${isInactive ? '#9ca3af' : '#1f2937'};">${app.formatCurrency(product.unit_price)}</div>
+                    ${product.cost_price ? `<div style="font-size: 0.75rem; color: #9ca3af;">Cost: ${app.formatCurrency(product.cost_price)}</div>` : ''}
+                </td>
+                <td style="text-align: center;">
+                    <div style="display: inline-flex; flex-direction: column; align-items: center; gap: 0.25rem;">
+                        <span style="font-weight: 700; font-size: 1.125rem; color: ${isInactive ? '#9ca3af' : stockColor};">
+                            ${product.stock_quantity}
+                    </span>
+                        <span style="font-size: 0.75rem; color: #6b7280;">${product.unit || 'pcs'}</span>
+                        ${isLowStock && !isInactive ? `<span class="badge badge-danger" style="font-size: 0.625rem; padding: 0.125rem 0.5rem;">LOW</span>` : ''}
+                </div>
+            </td>
+                <td style="text-align: center;">
+                    <label class="toggle-switch" title="Toggle Active Status">
+                        <input type="checkbox" ${product.is_active ? 'checked' : ''} 
+                               onchange="productManager.toggleStatus(${product.id}, this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    ${isInactive ? `<div style="font-size: 0.625rem; color: #ef4444; margin-top: 0.25rem; font-weight: 600;">
+                        Hidden from POS
+                    </div>` : `<div style="font-size: 0.625rem; color: #10b981; margin-top: 0.25rem; font-weight: 600;">
+                        Visible in POS
+                    </div>`}
+            </td>
+                <td style="text-align: center;">
+                    <div class="action-buttons" style="display: flex; gap: 0.5rem; justify-content: center;">
+                        <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); productManager.editProduct(${product.id}, this)" title="Edit Product">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        
+                        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); productManager.deleteProduct(${product.id}, this)" title="Delete Product">
+                            <i class="fas fa-trash"></i>
+                        </button>
                     </div>
                 </td>
-                    <td style="text-align: center;">
-                        <label class="toggle-switch" title="Toggle Active Status">
-                            <input type="checkbox" ${product.is_active ? 'checked' : ''} 
-                                   onchange="productManager.toggleStatus(${product.id}, this.checked)">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        ${isInactive ? `<div style="font-size: 0.625rem; color: #ef4444; margin-top: 0.25rem; font-weight: 600;">
-                            Hidden from POS
-                        </div>` : `<div style="font-size: 0.625rem; color: #10b981; margin-top: 0.25rem; font-weight: 600;">
-                            Visible in POS
-                        </div>`}
-                </td>
-                    <td style="text-align: center;">
-                        <div class="action-buttons" style="display: flex; gap: 0.5rem; justify-content: center;">
-                            <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); productManager.editProduct(${product.id}, this)" title="Edit Product">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            
-                            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); productManager.deleteProduct(${product.id}, this)" title="Delete Product">
-                                <i class="fas fa-trash"></i>
-                            </button>
+        </tr>
+        `;
+    }
+
+    renderProductCard(product) {
+        const isLowStock = product.stock_quantity < product.min_stock_level;
+        const isInactive = !product.is_active || product.is_active == 0;
+        const badgeClass = isInactive ? 'badge-danger' : 'badge-success';
+        const badgeText = isInactive ? 'Inactive' : 'Active';
+
+        // Stock color coding based on quantity
+        let stockClass = 'stock-high';
+        if (product.stock_quantity === 0) {
+            stockClass = 'stock-out';
+        } else if (product.stock_quantity < product.min_stock_level) {
+            stockClass = 'stock-low';
+        } else if (product.stock_quantity < product.min_stock_level * 2) {
+            stockClass = 'stock-medium';
+        }
+
+        // Category color coding
+        let categoryClass = 'category-mix';
+        const categoryName = (product.category_name || '').toLowerCase();
+        if (categoryName.includes('coklat') || categoryName.includes('chocolate')) {
+            categoryClass = 'category-coklat';
+        } else if (categoryName.includes('keju') || categoryName.includes('cheese')) {
+            categoryClass = 'category-keju';
+        } else if (categoryName.includes('topping') || categoryName.includes('extra')) {
+            categoryClass = 'category-topping';
+        }
+
+        return `
+            <div class="mobile-card touch-feedback" data-id="${product.id}" style="${isInactive ? 'opacity: 0.6;' : ''}">
+                <div class="mobile-card-header">
+                    <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+                        <div style="width: 50px; height: 50px; border-radius: 8px; overflow: hidden; background: #f3f4f6; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            ${product.image ?
+                `<img src="../${product.image}" alt="${product.name}" loading="lazy" style="width: 100%; height: 100%; object-fit: cover;">` :
+                `<i class="fas fa-image" style="color: #d1d5db; font-size: 1.25rem;"></i>`
+            }
                         </div>
-                    </td>
-            </tr>
-            `;
-        }).join('');
+                        <div class="mobile-card-title" style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 700; font-size: 16px; margin-bottom: 4px;">${product.name}</div>
+                            <div style="font-size: 12px; color: #6b7280; font-family: monospace;">${product.sku}</div>
+                        </div>
+                    </div>
+                    <span class="mobile-card-badge ${badgeClass}">${badgeText}</span>
+                </div>
+                <div class="mobile-card-body">
+                    <div class="mobile-card-row">
+                        <div class="mobile-card-label">
+                            <i class="fas fa-folder"></i> Category
+                        </div>
+                        <div class="mobile-card-value">
+                            <span class="category-badge ${categoryClass}">
+                                ${product.category_name || 'Uncategorized'}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="mobile-card-row">
+                        <div class="mobile-card-label">
+                            <i class="fas fa-tag"></i> Price
+                        </div>
+                        <div class="mobile-card-value price-highlight">${app.formatCurrency(product.unit_price)}</div>
+                    </div>
+                    <div class="mobile-card-row">
+                        <div class="mobile-card-label">
+                            <i class="fas fa-boxes"></i> Stock
+                        </div>
+                        <div class="mobile-card-value ${stockClass}" style="font-weight: 700;">
+                            ${product.stock_quantity} ${product.unit || 'pcs'}
+                            ${isLowStock ? '<span class="badge badge-danger" style="margin-left: 4px; font-size: 10px;">LOW</span>' : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="mobile-card-footer">
+                    <button class="btn btn-sm btn-info touch-feedback" onclick="productManager.editProduct(${product.id}, this)">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    <button class="btn btn-sm btn-danger touch-feedback" onclick="productManager.deleteProduct(${product.id}, this)">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+        `;
     }
 
     renderPagination(pagination) {
         const container = document.getElementById('pagination');
         if (!container || !pagination) return;
-        
+
         const { page, pages, total } = pagination;
-        
+
         if (pages <= 1) {
             container.innerHTML = '';
             return;
@@ -278,7 +432,7 @@ class ProductManager {
             </div>
             <div class="pagination-controls">
         `;
-        
+
         // Previous button
         html += `
             <button class="btn btn-sm ${page === 1 ? 'btn-secondary' : 'btn-primary'}" 
@@ -287,11 +441,11 @@ class ProductManager {
                 <i class="fas fa-chevron-left"></i> Previous
             </button>
         `;
-        
+
         // Page numbers
         for (let i = 1; i <= pages; i++) {
             if (i === 1 || i === pages || (i >= page - 2 && i <= page + 2)) {
-            html += `
+                html += `
                     <button class="btn btn-sm ${i === page ? 'btn-primary' : 'btn-secondary'}" 
                         onclick="productManager.goToPage(${i})">
                     ${i}
@@ -301,7 +455,7 @@ class ProductManager {
                 html += `<span style="padding: 0 0.5rem;">...</span>`;
             }
         }
-        
+
         // Next button
         html += `
             <button class="btn btn-sm ${page === pages ? 'btn-secondary' : 'btn-primary'}" 
@@ -310,7 +464,7 @@ class ProductManager {
                 Next <i class="fas fa-chevron-right"></i>
             </button>
         `;
-        
+
         html += `</div>`;
         container.innerHTML = html;
     }
@@ -352,10 +506,27 @@ class ProductManager {
             this.loadProducts();
         });
 
-        // Refresh button
-        document.getElementById('refreshBtn')?.addEventListener('click', () => {
-            this.loadProducts();
-            app.showToast('Products refreshed', 'success');
+        // Refresh button with loading state
+        document.getElementById('refreshBtn')?.addEventListener('click', async () => {
+            const btn = document.getElementById('refreshBtn');
+            const originalHTML = btn.innerHTML;
+
+            // Add loading state
+            btn.disabled = true;
+            btn.classList.add('loading');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span class="btn-responsive-text">Refreshing...</span>';
+
+            try {
+                await this.loadProducts();
+                app.showToast('Products refreshed successfully', 'success');
+            } catch (error) {
+                app.showToast('Failed to refresh products', 'error');
+            } finally {
+                // Remove loading state
+                btn.disabled = false;
+                btn.classList.remove('loading');
+                btn.innerHTML = originalHTML;
+            }
         });
 
         // Auto-refresh when tab becomes visible or window gains focus
@@ -368,12 +539,28 @@ class ProductManager {
             this.loadProducts();
         });
 
+        // Handle window resize for mobile/desktop view toggle
+        window.addEventListener('resize', () => {
+            const mobileView = document.getElementById('mobileProductsView');
+            const tableContainer = document.querySelector('.table-container');
+
+            if (mobileView && tableContainer) {
+                if (window.innerWidth <= 768) {
+                    mobileView.style.display = 'block';
+                    tableContainer.style.display = 'none';
+                } else {
+                    mobileView.style.display = 'none';
+                    tableContainer.style.display = 'block';
+                }
+            }
+        });
+
         // Form submit
         document.getElementById('productForm')?.addEventListener('submit', (e) => {
             e.preventDefault();
             this.saveProduct();
         });
-        
+
         // Close inline form button
         document.getElementById('closeInlineFormBtn')?.addEventListener('click', () => {
             const addCard = document.getElementById('addProductCard');
@@ -382,7 +569,7 @@ class ProductManager {
                 this.resetForm();
             }
         });
-        
+
         // Reset form button
         document.getElementById('resetFormBtn')?.addEventListener('click', () => {
             this.resetForm();
@@ -396,35 +583,35 @@ class ProductManager {
                 e.preventDefault();
                 this.showProductModal();
             }
-            
+
             // Ctrl + F: Focus search
             if (e.ctrlKey && e.key === 'f') {
                 e.preventDefault();
                 document.getElementById('searchInput')?.focus();
             }
-            
+
             // F5: Refresh (prevent default browser refresh)
             if (e.key === 'F5') {
                 e.preventDefault();
                 this.loadProducts();
                 app.showToast('Products refreshed', 'success');
             }
-            
+
             // ESC: Close inline form
             if (e.key === 'Escape') {
                 const addCard = document.getElementById('addProductCard');
                 if (addCard && addCard.style.display !== 'none') {
-                this.hideProductModal();
+                    this.hideProductModal();
                 }
             }
         });
-        
+
         console.log('⌨️ Keyboard shortcuts activated');
     }
 
     showProductModal(product = null) {
         this.currentProductId = product ? product.id : null;
-        
+
         // Show inline form card
         const addCard = document.getElementById('addProductCard');
         if (addCard) {
@@ -448,7 +635,7 @@ class ProductManager {
             document.getElementById('productMinStock').value = product.min_stock_level || 3;
             document.getElementById('productUnit').value = product.unit || 'pcs';
             document.getElementById('productActive').checked = product.is_active == 1;
-            
+
             // Load existing image if available
             if (product.image && window.productImageUpload) {
                 window.productImageUpload.loadExistingImage(product.image);
@@ -457,20 +644,20 @@ class ProductManager {
             // Add mode
             this.resetForm();
         }
-        
+
         // Focus first input
         setTimeout(() => {
             document.getElementById('productName')?.focus();
         }, 300);
     }
-    
+
     resetForm() {
         document.getElementById('productForm').reset();
         document.getElementById('productActive').checked = true;
         document.getElementById('productMinStock').value = 3;
         document.getElementById('productUnit').value = 'pcs';
         this.currentProductId = null;
-        
+
         // Reset image upload
         if (window.productImageUpload) {
             window.productImageUpload.deleteImage(true, false);
@@ -509,15 +696,15 @@ class ProductManager {
         try {
             console.log('🚀 SAVE PRODUCT - Starting process...');
             console.log('📋 Initial product data:', JSON.stringify(data, null, 2));
-            
+
             // Show loading toast
             app.showToast('Saving product...', 'info');
-            
+
             // Handle image: upload if new file selected, otherwise keep existing path
             if (window.productImageUpload) {
                 const existingPath = window.productImageUpload.getImagePath?.() || null;
                 const hasSelectedFile = !!window.productImageUpload.selectedFile;
-                
+
                 if (hasSelectedFile) {
                     console.log('📤 New image selected - Starting upload...');
                     const imagePath = await window.productImageUpload.uploadImage();
@@ -538,9 +725,9 @@ class ProductManager {
                     console.log('ℹ️ No image to attach');
                 }
             }
-            
+
             console.log('📦 Final product data before send:', JSON.stringify(data, null, 2));
-            
+
             let url, method;
             if (this.currentProductId) {
                 url = `../api.php?controller=product&action=update&id=${this.currentProductId}`;
@@ -551,17 +738,17 @@ class ProductManager {
             }
 
             console.log('📤 Sending product data:', data);
-            
+
             const response = await app.apiCall(url, {
                 method: method,
                 body: JSON.stringify(data)
             });
-            
+
             console.log('📥 Save product response:', response);
 
             if (response.success) {
                 app.showToast(
-                    this.currentProductId ? 'Product updated successfully' : 'Product added successfully', 
+                    this.currentProductId ? 'Product updated successfully' : 'Product added successfully',
                     'success'
                 );
                 this.hideProductModal();
@@ -601,7 +788,7 @@ class ProductManager {
         }
     }
 
-    
+
 
     async toggleStatus(id, isActive) {
         try {
@@ -629,7 +816,7 @@ class ProductManager {
     async deleteProduct(id, btn = null) {
         const product = this.products.find(p => p.id === id);
         if (!product) return;
-        
+
         if (!confirm(`Are you sure you want to delete "${product.name}"?\n\nThis action cannot be undone.`)) { return; }
         const confirmText = prompt(`Type the product name to confirm deletion:\n\n${product.name}\n\nAlternatively, type DELETE to proceed.`);
         if (confirmText === null) { app.showToast('Deletion cancelled', 'info'); return; }
@@ -656,7 +843,7 @@ class ProductManager {
             if (btn) { btn.disabled = false; btn.innerHTML = originalHtml; }
         }
     }
-    
+
     // Export functionality
     toggleExportMenu() {
         const menu = document.getElementById('exportMenu');
@@ -664,35 +851,35 @@ class ProductManager {
             menu.classList.toggle('show');
         }
     }
-    
+
     exportData(format) {
         document.getElementById('exportMenu').classList.remove('show');
-        
+
         // Use global showToast function
         if (typeof showToast === 'function') {
             showToast(`Exporting ${this.products.length} products as ${format.toUpperCase()}...`, 'info');
         }
-        
+
         // Build export URL with current filters
         let exportUrl = `../api.php?controller=product&action=export&format=${format}`;
-        
+
         // Add search query if active
         if (this.searchQuery) {
             exportUrl += `&search=${encodeURIComponent(this.searchQuery)}`;
         }
-        
+
         // Add category filter if active
         if (this.categoryFilter) {
             exportUrl += `&category_id=${encodeURIComponent(this.categoryFilter)}`;
         }
-        
+
         // Add status filter if active
         if (this.statusFilter !== '') {
             exportUrl += `&status=${encodeURIComponent(this.statusFilter)}`;
         }
-        
+
         console.log('Export URL:', exportUrl);
-        
+
         // Trigger download
         setTimeout(() => {
             window.location.href = exportUrl;
@@ -703,12 +890,12 @@ class ProductManager {
 // Initialize when DOM is ready
 let productManager;
 if (document.readyState === 'loading') {
-document.addEventListener('DOMContentLoaded', () => {
-    productManager = new ProductManager();
-    // Expose globally for inline onclick handlers
-    try { window.productManager = productManager; } catch (e) {}
-});
+    document.addEventListener('DOMContentLoaded', () => {
+        productManager = new ProductManager();
+        // Expose globally for inline onclick handlers
+        try { window.productManager = productManager; } catch (e) { }
+    });
 } else {
     productManager = new ProductManager();
-    try { window.productManager = productManager; } catch (e) {}
+    try { window.productManager = productManager; } catch (e) { }
 }

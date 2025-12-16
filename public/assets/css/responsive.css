@@ -155,14 +155,12 @@
     .mobile-filter-bar { flex-direction: column; align-items: stretch; }
     .mobile-filter-bar #searchInput { width: 100%; min-width: unset; }
     .mobile-filter-bar .chips-scroll { margin-top: .5rem; }
-}
 
     /* Bottom Sheet */
     .bottom-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top-left-radius: 16px; border-top-right-radius: 16px; box-shadow: 0 -12px 24px rgba(0,0,0,.12); transform: translateY(100%); transition: transform .25s ease; z-index: 1000; }
     .bottom-sheet.open { transform: translateY(0); }
     .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 999; }
     .backdrop.show { opacity: 1; pointer-events: auto; }
-}
     
     /* Forms */
     .form-row {
@@ -258,7 +256,7 @@
     .pos-cart {
         order: 1;
     }
-}
+
 
 /* ========================================
    EXTRA SMALL DEVICES - Mobile Portrait (< 480px)
@@ -309,6 +307,9 @@
     .stat-card {
         padding: 1rem;
     }
+    .stats-grid--wide { gap: .75rem; margin-bottom: 1rem; }
+    .view-toggle-btn { font-size: .875rem; }
+}
     
     .stat-value {
         font-size: 1.5rem;

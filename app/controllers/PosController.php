@@ -263,6 +263,27 @@ class PosController extends BaseController {
             
             $taxable_amount = $subtotal - $discount_amount;
             $tax_percentage = $data['tax_percentage'] ?? 10;
+            try {
+                $hasSettings = false;
+                try { $hasSettings = ($this->pdo->query("SHOW TABLES LIKE 'settings'")->rowCount() > 0); } catch (Exception $e) { $hasSettings = false; }
+                if ($hasSettings) {
+                    $stmtTaxEnabled = $this->pdo->prepare("SELECT `value` FROM settings WHERE `key` = 'enable_tax' LIMIT 1");
+                    $stmtTaxEnabled->execute();
+                    $rowEnabled = $stmtTaxEnabled->fetch(PDO::FETCH_ASSOC);
+                    if ($rowEnabled && $rowEnabled['value'] !== '1') {
+                        $tax_percentage = 0;
+                    } else {
+                        if (!isset($data['tax_percentage'])) {
+                            $stmtTaxRate = $this->pdo->prepare("SELECT `value` FROM settings WHERE `key` = 'tax_rate' LIMIT 1");
+                            $stmtTaxRate->execute();
+                            $rowRate = $stmtTaxRate->fetch(PDO::FETCH_ASSOC);
+                            if ($rowRate && is_numeric($rowRate['value'])) {
+                                $tax_percentage = (float)$rowRate['value'];
+                            }
+                        }
+                    }
+                }
+            } catch (Exception $e) {}
             $tax_amount = $taxable_amount * ($tax_percentage / 100);
             
             $total_amount = $taxable_amount + $tax_amount;

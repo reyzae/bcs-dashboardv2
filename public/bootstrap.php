@@ -22,17 +22,37 @@ date_default_timezone_set('Asia/Jakarta');
 // Use secure/httponly/samesite where possible
 $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (isset($_ENV['APP_URL']) && stripos($_ENV['APP_URL'], 'https://') === 0);
+
 ini_set('session.cookie_httponly', '1');
 ini_set('session.cookie_secure', $isHttps ? '1' : '0');
-// PHP 7.3+: samesite via ini; fallback is fine on older versions
-// Tighten SameSite policy: Strict in production, Lax in development
-$isProductionEnv = ($_ENV['APP_ENV'] ?? 'development') === 'production';
-ini_set('session.cookie_samesite', $isProductionEnv ? 'Strict' : 'Lax');
+
+// SECURITY: Gunakan Strict untuk semua environment (lebih aman)
+ini_set('session.cookie_samesite', 'Strict');
 
 // Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+
+// SECURITY: Session regeneration untuk mencegah session fixation
+if (!isset($_SESSION['initiated'])) {
+    session_regenerate_id(true);
+    $_SESSION['initiated'] = true;
+    $_SESSION['created_at'] = time();
+}
+
+// SECURITY: Session timeout (30 menit tidak aktif)
+$sessionTimeout = 1800; // 30 menit dalam detik
+if (isset($_SESSION['last_activity'])) {
+    $inactive = time() - $_SESSION['last_activity'];
+    if ($inactive > $sessionTimeout) {
+        // Session expired, destroy it
+        session_unset();
+        session_destroy();
+        session_start();
+    }
+}
+$_SESSION['last_activity'] = time();
 
 // Ensure CSRF token exists
 require_once __DIR__ . '/../app/helpers/SecurityMiddleware.php';
@@ -45,7 +65,7 @@ if (class_exists('SecurityMiddleware')) {
             'path' => '/',
             'secure' => $isHttps,
             'httponly' => false,
-            'samesite' => $isProductionEnv ? 'Strict' : 'Lax'
+            'samesite' => 'Strict'
         ];
         // setcookie supports array options on PHP 7.3+
         @setcookie('csrf_token', $_SESSION['csrf_token'], $cookieParams);

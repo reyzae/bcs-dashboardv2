@@ -97,12 +97,31 @@ class ImageUploader {
             ];
         }
         
-        // Check MIME type
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mimeType = finfo_file($finfo, $file['tmp_name']);
-        finfo_close($finfo);
+        // Check MIME type with safe fallbacks (avoid fatal when fileinfo/GD not available)
+        $mimeType = null;
+        if (function_exists('finfo_open')) {
+            $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo) {
+                $mimeType = @finfo_file($finfo, $file['tmp_name']);
+                @finfo_close($finfo);
+            }
+        }
+        // Fallback to getimagesize if fileinfo is unavailable
+        if (!$mimeType && function_exists('getimagesize')) {
+            $info = @getimagesize($file['tmp_name']);
+            if (is_array($info) && isset($info['mime'])) {
+                $mimeType = $info['mime'];
+            }
+        }
+        // Final fallback: infer from extension
+        if (!$mimeType) {
+            $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+            if (in_array($ext, ['jpg','jpeg'])) $mimeType = 'image/jpeg';
+            else if ($ext === 'png') $mimeType = 'image/png';
+            else if ($ext === 'webp') $mimeType = 'image/webp';
+        }
         
-        if (!in_array($mimeType, $this->allowedTypes)) {
+        if (!$mimeType || !in_array($mimeType, $this->allowedTypes)) {
             return [
                 'success' => false,
                 'message' => 'Invalid file type. Only JPG, PNG, and WEBP are allowed'
@@ -168,19 +187,23 @@ class ImageUploader {
         $newHeight = round($height * $ratio);
         
         // Create image resource
+        // Create source image if corresponding function exists; otherwise skip optimization
         switch ($mimeType) {
             case 'image/jpeg':
             case 'image/jpg':
-                $source = imagecreatefromjpeg($filepath);
+                if (!function_exists('imagecreatefromjpeg')) return true;
+                $source = @imagecreatefromjpeg($filepath);
                 break;
             case 'image/png':
-                $source = imagecreatefrompng($filepath);
+                if (!function_exists('imagecreatefrompng')) return true;
+                $source = @imagecreatefrompng($filepath);
                 break;
             case 'image/webp':
-                $source = imagecreatefromwebp($filepath);
+                if (!function_exists('imagecreatefromwebp')) return true;
+                $source = @imagecreatefromwebp($filepath);
                 break;
             default:
-                return false;
+                return true;
         }
         
         if (!$source) {
@@ -208,13 +231,13 @@ class ImageUploader {
         switch ($mimeType) {
             case 'image/jpeg':
             case 'image/jpg':
-                imagejpeg($destination, $filepath, 85);
+                if (function_exists('imagejpeg')) @imagejpeg($destination, $filepath, 85);
                 break;
             case 'image/png':
-                imagepng($destination, $filepath, 8);
+                if (function_exists('imagepng')) @imagepng($destination, $filepath, 8);
                 break;
             case 'image/webp':
-                imagewebp($destination, $filepath, 85);
+                if (function_exists('imagewebp')) @imagewebp($destination, $filepath, 85);
                 break;
         }
         

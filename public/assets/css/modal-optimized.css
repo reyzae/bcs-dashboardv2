@@ -1,0 +1,138 @@
+/**
+ * USER PROFILE MODAL - OPTIMIZED SIZING
+ * Compact and aesthetic modal design
+ */
+
+/* Modal Header - Compact */
+.modal-header {
+    padding: 1rem 1.5rem !important;
+}
+
+.modal-header .modal-title {
+    font-size: 1rem !important;
+    font-weight: 600;
+}
+
+.modal-close {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 1.25rem !important;
+}
+
+/* Modal Body - Tighter Spacing */
+.modal-body {
+    padding: 1.25rem 1.5rem !important;
+}
+
+/* User Avatar - Smaller */
+.user-avatar,
+.modal-body .user-avatar {
+    width: 80px !important;
+    height: 80px !important;
+    margin: 1rem auto !important;
+    font-size: 2rem !important;
+}
+
+/* User Info - Compact */
+.user-name {
+    font-size: 1.125rem !important;
+    margin-bottom: 0.25rem !important;
+    font-weight: 700;
+}
+
+.user-email {
+    font-size: 0.8125rem !important;
+    margin-bottom: 1rem !important;
+    color: #6b7280;
+}
+
+/* Info Rows - Tighter */
+.info-row,
+.modal-body .info-row {
+    padding: 0.625rem 0 !important;
+    font-size: 0.875rem !important;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.info-row i {
+    width: 16px !important;
+    font-size: 0.875rem !important;
+    margin-right: 0.5rem;
+    color: #9ca3af;
+}
+
+.info-row .label {
+    font-weight: 500;
+    color: #6b7280;
+    display: flex;
+    align-items: center;
+}
+
+.info-row .value {
+    font-weight: 600;
+    color: #111827;
+}
+
+/* Badge - Smaller */
+.badge {
+    padding: 0.25rem 0.625rem !important;
+    font-size: 0.75rem !important;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.badge-success {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.badge-danger {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* Modal Footer - Compact */
+.modal-footer {
+    padding: 1rem 1.5rem !important;
+    gap: 0.75rem !important;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.modal-footer .btn {
+    padding: 0.5rem 1.25rem !important;
+    font-size: 0.875rem !important;
+    border-radius: 6px;
+    font-weight: 600;
+}
+
+/* Mobile Responsive */
+@media (max-width: 480px) {
+    .modal-dialog {
+        max-width: 95% !important;
+        margin: 1rem auto !important;
+    }
+
+    .modal-header,
+    .modal-body,
+    .modal-footer {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+
+    .user-avatar {
+        width: 70px !important;
+        height: 70px !important;
+        font-size: 1.75rem !important;
+    }
+
+    .modal-footer {
+        flex-direction: column;
+    }
+
+    .modal-footer .btn {
+        width: 100%;
+    }
+}

@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../bootstrap.php';
 ?><!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,6 +13,7 @@ require_once __DIR__ . '/../bootstrap.php';
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="../assets/css/shop.css">
 </head>
+
 <body class="shop-theme">
     <header class="shop-header">
         <div class="container header-content">
@@ -50,14 +52,6 @@ require_once __DIR__ . '/../bootstrap.php';
                         <option value="price_desc">Harga Termahal</option>
                     </select>
                 </div>
-                <div class="view-toggle">
-                    <button id="viewGrid" class="btn btn-secondary active">
-                        <i class="fas fa-grip mr-2"></i>Grid
-                    </button>
-                    <button id="viewList" class="btn btn-secondary">
-                        <i class="fas fa-list mr-2"></i>List
-                    </button>
-                </div>
             </div>
         </section>
 
@@ -90,4 +84,5 @@ require_once __DIR__ . '/../bootstrap.php';
 
     <script src="../assets/js/shop.js"></script>
 </body>
+
 </html>

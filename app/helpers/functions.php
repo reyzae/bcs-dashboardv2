@@ -93,7 +93,6 @@ function getMenuByRole() {
             ['icon' => 'fa-users', 'label' => 'Customers', 'url' => 'customers.php'],
             ['icon' => 'fa-receipt', 'label' => 'Transactions', 'url' => 'transactions.php'],
             ['icon' => 'fa-chart-bar', 'label' => 'Reports', 'url' => 'reports.php'],
-            ['icon' => 'fa-cog', 'label' => 'Settings', 'url' => 'settings.php'],
         ],
         'staff' => [
             ['icon' => 'fa-home', 'label' => 'Dashboard', 'url' => 'index.php'],

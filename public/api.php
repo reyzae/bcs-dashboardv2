@@ -10,7 +10,9 @@ require_once __DIR__ . '/../app/config/database.php';
 require_once __DIR__ . '/../app/helpers/SecurityMiddleware.php';
 
 // Clean any previous output to avoid HTML breaking JSON
-while (ob_get_level() > 0) { ob_end_clean(); }
+while (ob_get_level() > 0) {
+    ob_end_clean();
+}
 ob_start();
 
 // Ensure API responses are JSON-only (avoid HTML errors breaking JSON)
@@ -93,7 +95,7 @@ try {
     http_response_code(500);
     $isDebug = ($_ENV['APP_DEBUG'] ?? 'false') === 'true';
     echo json_encode([
-        'success' => false, 
+        'success' => false,
         'error' => 'Database connection failed',
         'message' => $isDebug ? $e->getMessage() : 'Database connection failed. Please contact administrator.',
         'debug_info' => $isDebug ? [
@@ -111,6 +113,11 @@ try {
 // Get the controller and action from query string
 $controller = $_GET['controller'] ?? '';
 $action = $_GET['action'] ?? '';
+
+// Alias: allow public shop to use product list without authentication
+if ($controller === 'product' && $action === 'list' && (!isset($_SESSION['user_id']) || empty($_SESSION['user_id']))) {
+    $action = 'listPublic';
+}
 
 // Map of valid controllers
 $validControllers = [
@@ -146,6 +153,21 @@ if (!file_exists($controllerFile)) {
 // Set action in GET for controller to process
 $_GET['action'] = $action;
 
+// Action aliases - map hyphenated actions to camelCase methods
+$actionAliases = [
+    'daily-sales' => 'getDailySales',
+    'top-products' => 'getTopProducts',
+    'sync-shop' => 'syncShop',
+    'update-status' => 'updateStatus',
+    'resolve-by-number' => 'resolveByNumber',
+];
+
+// Apply alias if exists
+if (isset($actionAliases[$action])) {
+    $action = $actionAliases[$action];
+    $_GET['action'] = $action;
+}
+
 // Check if action is provided
 if (empty($action)) {
     http_response_code(400);
@@ -156,10 +178,10 @@ if (empty($action)) {
 // Include the controller file with error handling
 try {
     require_once $controllerFile;
-    
+
     // Determine controller class name from file path
     $controllerClassName = ucfirst($controller) . 'Controller';
-    
+
     // Check if class exists
     if (!class_exists($controllerClassName)) {
         http_response_code(500);
@@ -170,10 +192,10 @@ try {
         ]);
         exit;
     }
-    
+
     // Instantiate controller with database connection
     $controllerInstance = new $controllerClassName($pdo);
-    
+
     // Check if action method exists
     if (!method_exists($controllerInstance, $action)) {
         http_response_code(404);
@@ -184,10 +206,10 @@ try {
         ]);
         exit;
     }
-    
+
     // Call the action method
     $controllerInstance->$action();
-    
+
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode([

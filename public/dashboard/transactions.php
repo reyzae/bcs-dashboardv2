@@ -1589,6 +1589,7 @@ class TransactionManager {
         const tableView = document.getElementById('tableView');
         const chartView = document.getElementById('chartView');
         const btns = document.querySelectorAll('.view-toggle-btn');
+        const isMobile = window.innerWidth <= 768;
         
         btns.forEach(btn => {
             if (btn.dataset.view === view) {
@@ -1607,8 +1608,14 @@ class TransactionManager {
             chartView.style.display = 'block';
             this.renderRevenueChart();
         } else {
-            tableView.style.display = 'block';
             chartView.style.display = 'none';
+            if (isMobile) {
+                tableView.style.display = 'none';
+                this.renderTransactions();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+                tableView.style.display = 'block';
+            }
         }
     }
 

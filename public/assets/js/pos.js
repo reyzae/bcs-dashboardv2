@@ -12,7 +12,8 @@ class POSManager {
         this.selectedCustomer = null;
         this.selectedProduct = null;
         this.paymentMethod = 'cash';
-        this.taxRate = 11; // 11% tax rate (PPN Indonesia)
+        this.taxRate = 11;
+        this.taxEnabled = true;
         this.discountRate = 0;
         this.barcodeBuffer = '';
         this.barcodeTimeout = null;
@@ -49,6 +50,9 @@ class POSManager {
         // Refresh stats every 60 seconds
         setInterval(() => this.loadQuickStats(), 60000);
         
+        try { if (window.matchMedia('(max-width: 480px)').matches) { document.documentElement.classList.add('density-compact'); } } catch (e) {}
+        this.updateCartSummary();
+        this.updateCheckoutButton();
         console.log('✅ POS System Ready!');
         console.log('🔔 Customer sync enabled');
     }
@@ -88,6 +92,35 @@ class POSManager {
             console.warn('⚠️ Using default tax rate: 11%');
             this.taxRate = 11;
         }
+
+        try {
+            const res2 = await fetch('../api.php?controller=settings&action=get&key=enable_tax');
+            if (res2.ok) {
+                const d2 = await res2.json();
+                const enabled = (d2.success && d2.data && String(d2.data.value) === '1');
+                this.taxEnabled = enabled;
+                const taxInput = document.getElementById('taxInput');
+                if (taxInput) {
+                    const suffix = taxInput.parentElement?.querySelector('.input-suffix');
+                    if (!enabled) {
+                        taxInput.value = '';
+                        taxInput.placeholder = '';
+                        taxInput.disabled = true;
+                        if (suffix) suffix.style.display = 'none';
+                    } else {
+                        taxInput.disabled = false;
+                        if (!taxInput.value) taxInput.value = this.taxRate;
+                        taxInput.placeholder = String(this.taxRate);
+                        if (suffix) suffix.style.display = '';
+                    }
+                }
+                if (!enabled) { this.taxRate = 0; }
+            }
+        } catch (e) {
+            this.taxEnabled = true;
+        }
+        this.updateCartSummary();
+        this.updateCheckoutButton();
     }
 
     async loadProducts() {
@@ -672,9 +705,8 @@ class POSManager {
         // Calculate discount
         const discount = subtotal * (this.discountRate / 100);
         
-        // Calculate tax
         const taxableAmount = subtotal - discount;
-        const tax = taxableAmount * (this.taxRate / 100);
+        const tax = this.taxEnabled ? (taxableAmount * (this.taxRate / 100)) : 0;
         
         // Calculate total
         const total = taxableAmount + tax;
@@ -684,11 +716,10 @@ class POSManager {
         document.getElementById('cartTax').textContent = app.formatCurrency(tax);
         document.getElementById('cartTotal').textContent = app.formatCurrency(total);
         
-        // Update tax label with current rate
         const taxLabelElements = document.querySelectorAll('.summary-row span');
         taxLabelElements.forEach(el => {
             if (el.textContent.includes('Tax')) {
-                el.textContent = `Tax (${this.taxRate}%):`;
+                el.textContent = this.taxEnabled ? `Tax (${this.taxRate}%):` : 'Tax (Disabled):';
             }
         });
 
@@ -723,7 +754,7 @@ class POSManager {
         const subtotal = this.cart.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
         const discount = subtotal * (this.discountRate / 100);
         const taxableAmount = subtotal - discount;
-        const tax = taxableAmount * (this.taxRate / 100);
+        const tax = this.taxEnabled ? (taxableAmount * (this.taxRate / 100)) : 0;
         return taxableAmount + tax;
     }
 
@@ -981,7 +1012,7 @@ class POSManager {
                 customer_id: this.selectedCustomer?.id ? parseInt(this.selectedCustomer.id) : null,
                 payment_method: this.paymentMethod,
                 payment_reference: this.paymentMethod !== 'cash' ? `${this.paymentMethod.toUpperCase()}-${Date.now()}` : null,
-                tax_percentage: this.taxRate,
+                tax_percentage: this.taxEnabled ? this.taxRate : 0,
                 discount_percentage: this.discountRate,
                 // Capture cash values for cash payments
                 cash_received: this.paymentMethod === 'cash' ? paymentAmount : null,

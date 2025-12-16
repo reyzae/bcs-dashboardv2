@@ -207,12 +207,36 @@ class ProductImageUpload {
         try {
             this.showProgress(0);
             
+            const getCsrfToken = () => {
+                const meta = document.querySelector('meta[name="csrf-token"]');
+                if (meta && meta.content) return meta.content;
+                if (window.CSRF_TOKEN) return window.CSRF_TOKEN;
+                const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
+                return match ? decodeURIComponent(match[1]) : null;
+            };
+            const csrfToken = getCsrfToken();
+
             const response = await fetch('../api.php?controller=product&action=uploadImage', {
                 method: 'POST',
-                body: formData
+                body: formData,
+                credentials: 'same-origin',
+                headers: {
+                    ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {})
+                }
             });
-            
-            const result = await response.json();
+
+            const contentType = response.headers.get('content-type') || '';
+            let result;
+            if (contentType.includes('application/json')) {
+                result = await response.json();
+            } else {
+                const text = await response.text();
+                if (!response.ok) {
+                    throw new Error(text || `HTTP ${response.status}`);
+                }
+                throw new Error('Response bukan JSON: ' + (text.slice(0, 200) || 'unknown'));
+            }
+
             console.log('📦 Upload API response:', result);
             
             this.hideProgress();
@@ -223,11 +247,9 @@ class ProductImageUpload {
                 if (window.app) {
                     app.showToast('Image uploaded successfully', 'success');
                 }
-                // Return the full path
                 return this.currentImagePath;
-            } else {
-                throw new Error(result.message || 'Upload failed');
             }
+            throw new Error(result.message || result.error || 'Upload failed');
         } catch (error) {
             this.hideProgress();
             console.error('❌ Upload error:', error);

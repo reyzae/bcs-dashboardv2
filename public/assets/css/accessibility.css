@@ -1,40 +1,359 @@
-/* Accessibility and Skeleton Styles */
+/**
+ * ACCESSIBILITY ENHANCEMENTS
+ * 3-Second Understanding: Keyboard navigation and screen reader support
+ */
+
+/* ============================================
+   SKIP LINKS
+   ============================================ */
 
 .skip-link {
   position: absolute;
-  left: -9999px;
-  top: -9999px;
-  background: #111827;
-  color: #ffffff;
-  padding: 8px 12px;
+  top: -40px;
+  left: 0;
+  background: var(--primary-color, #16a34a);
+  color: white;
+  padding: 8px 16px;
+  text-decoration: none;
+  border-radius: 0 0 4px 0;
+  z-index: 100000;
+  font-weight: 600;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* ============================================
+   FOCUS STYLES
+   ============================================ */
+
+/* Remove default outline */
+*:focus {
+  outline: none;
+}
+
+/* Custom focus ring */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--primary-color, #16a34a);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Focus for interactive elements */
+.btn:focus-visible,
+.nav-link:focus-visible,
+.dropdown-item:focus-visible {
+  outline: 3px solid var(--primary-color, #16a34a);
+  outline-offset: 2px;
+}
+
+/* ============================================
+   KEYBOARD NAVIGATION
+   ============================================ */
+
+/* Keyboard shortcuts hint */
+.keyboard-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #9ca3af;
+  margin-left: auto;
+}
+
+.keyboard-shortcut kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: #374151;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* ============================================
+   SCREEN READER ONLY
+   ============================================ */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.sr-only-focusable:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: inherit;
+  margin: inherit;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* ============================================
+   ARIA LIVE REGIONS
+   ============================================ */
+
+.aria-live-region {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* ============================================
+   HIGH CONTRAST MODE
+   ============================================ */
+
+@media (prefers-contrast: high) {
+  .btn {
+    border: 2px solid currentColor;
+  }
+
+  .card {
+    border: 2px solid #000;
+  }
+
+  .form-input,
+  .form-select,
+  .form-textarea {
+    border-width: 3px;
+  }
+}
+
+/* ============================================
+   REDUCED MOTION
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================
+   DARK MODE SUPPORT (Optional)
+   ============================================ */
+
+@media (prefers-color-scheme: dark) {
+  /* Add dark mode styles if needed */
+}
+
+/* ============================================
+   FOCUS TRAP FOR MODALS
+   ============================================ */
+
+.modal[aria-hidden="false"] {
+  /* Ensure modal is visible and focusable */
+  display: flex;
+}
+
+/* ============================================
+   ACCESSIBLE TOOLTIPS
+   ============================================ */
+
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  padding: 6px 12px;
+  background: #1f2937;
+  color: white;
+  font-size: 12px;
   border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
   z-index: 1000;
 }
-.skip-link:focus,
-.skip-link:focus-visible {
-  left: 12px;
-  top: 12px;
-  outline: 3px solid #16a34a;
+
+[data-tooltip]:hover::after,
+[data-tooltip]:focus::after {
+  opacity: 1;
 }
 
-button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
-  outline: 3px solid #16a34a;
-  outline-offset: 2px;
-  border-radius: 6px;
+/* ============================================
+   ACCESSIBLE FORM VALIDATION
+   ============================================ */
+
+.form-input[aria-invalid="true"] {
+  border-color: #ef4444;
+  background: #fef2f2;
 }
 
-.skeleton {
-  display: inline-block;
-  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 37%, #e5e7eb 63%);
-  background-size: 400% 100%;
-  animation: skeleton-shimmer 1.2s ease-in-out infinite;
-  border-radius: 6px;
+.form-input[aria-invalid="false"] {
+  border-color: #10b981;
+  background: #f0fdf4;
 }
-.skeleton-text { height: 0.9em; width: 100%; }
-.skeleton-rect { width: 100%; height: 120px; }
-.skeleton-circle { width: 40px; height: 40px; border-radius: 50%; }
 
-@keyframes skeleton-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+/* ============================================
+   ACCESSIBLE TABLES
+   ============================================ */
+
+table {
+  border-collapse: collapse;
+}
+
+th[scope="col"] {
+  text-align: left;
+}
+
+th[scope="row"] {
+  font-weight: 600;
+}
+
+/* ============================================
+   ACCESSIBLE BUTTONS
+   ============================================ */
+
+button:disabled,
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+button[aria-pressed="true"] {
+  background: var(--primary-dark, #15803d);
+}
+
+/* ============================================
+   ACCESSIBLE NAVIGATION
+   ============================================ */
+
+/* Navigation with aria-label is accessible by default */
+
+.nav-link[aria-current="page"] {
+  font-weight: 700;
+  background: rgba(22, 163, 74, 0.1);
+}
+
+/* ============================================
+   COLOR CONTRAST HELPERS
+   ============================================ */
+
+.text-contrast-high {
+  color: #000;
+}
+
+.bg-contrast-high {
+  background: #fff;
+  color: #000;
+}
+
+/* ============================================
+   KEYBOARD SHORTCUTS PANEL
+   ============================================ */
+
+.keyboard-shortcuts-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+  z-index: 10001;
+  overflow-y: auto;
+  display: none;
+}
+
+.keyboard-shortcuts-panel.active {
+  display: block;
+}
+
+.shortcuts-header {
+  padding: 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.shortcuts-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.shortcuts-body {
+  padding: 24px;
+}
+
+.shortcut-group {
+  margin-bottom: 24px;
+}
+
+.shortcut-group h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+.shortcut-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.shortcut-item:last-child {
+  border-bottom: none;
+}
+
+.shortcut-description {
+  font-size: 14px;
+  color: #374151;
+}
+
+.shortcut-keys {
+  display: flex;
+  gap: 4px;
+}
+
+.shortcut-keys kbd {
+  padding: 4px 8px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
 }

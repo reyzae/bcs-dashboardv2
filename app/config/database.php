@@ -4,7 +4,8 @@
  * Modern database connection with error handling and security
  */
 
-class Database {
+class Database
+{
     private $host;
     private $port;
     private $db_name;
@@ -12,10 +13,22 @@ class Database {
     private $password;
     private $charset;
     private $pdo;
-    
-    public function __construct() {
-        $hostConfig = $_ENV['DB_HOST'] ?? 'localhost';
-        
+
+    public function __construct()
+    {
+        // Validasi: Pastikan semua konfigurasi database tersedia
+        if (empty($_ENV['DB_HOST'])) {
+            throw new Exception('DB_HOST tidak ditemukan. Silakan cek file config.env');
+        }
+        if (empty($_ENV['DB_NAME'])) {
+            throw new Exception('DB_NAME tidak ditemukan. Silakan cek file config.env');
+        }
+        if (!isset($_ENV['DB_USER'])) {
+            throw new Exception('DB_USER tidak ditemukan. Silakan cek file config.env');
+        }
+
+        $hostConfig = $_ENV['DB_HOST'];
+
         // Handle host with port (e.g., localhost:33066)
         if (strpos($hostConfig, ':') !== false) {
             list($this->host, $this->port) = explode(':', $hostConfig);
@@ -23,14 +36,15 @@ class Database {
             $this->host = $hostConfig;
             $this->port = '3306';
         }
-        
-        $this->db_name = $_ENV['DB_NAME'] ?? 'wiracent_balok';
-        $this->username = $_ENV['DB_USER'] ?? 'root';
-        $this->password = $_ENV['DB_PASS'] ?? '';
+
+        $this->db_name = $_ENV['DB_NAME'];
+        $this->username = $_ENV['DB_USER'];
+        $this->password = $_ENV['DB_PASS'] ?? ''; // Password boleh kosong
         $this->charset = 'utf8mb4';
     }
-    
-    public function getConnection() {
+
+    public function getConnection()
+    {
         if ($this->pdo === null) {
             try {
                 $dsn = "mysql:host={$this->host};port={$this->port};dbname={$this->db_name};charset={$this->charset}";
@@ -45,27 +59,27 @@ class Database {
                 if (defined('PDO::MYSQL_ATTR_INIT_COMMAND')) {
                     $options[PDO::MYSQL_ATTR_INIT_COMMAND] = "SET NAMES {$this->charset}";
                 }
-                
+
                 // Add MySQL-specific timeout if available (PHP 7.4+)
-                $mysqlConnectTimeout = defined('PDO::MYSQL_ATTR_CONNECT_TIMEOUT') 
-                    ? PDO::MYSQL_ATTR_CONNECT_TIMEOUT 
+                $mysqlConnectTimeout = defined('PDO::MYSQL_ATTR_CONNECT_TIMEOUT')
+                    ? PDO::MYSQL_ATTR_CONNECT_TIMEOUT
                     : null;
                 if ($mysqlConnectTimeout !== null) {
                     $options[$mysqlConnectTimeout] = 10;
                 }
-                
+
                 $this->pdo = new PDO($dsn, $this->username, $this->password, $options);
             } catch (PDOException $e) {
                 $errorMessage = $e->getMessage();
                 $errorCode = $e->getCode();
-                
+
                 // Log detailed error
                 error_log("Database connection failed: [{$errorCode}] {$errorMessage}");
                 error_log("Connection details: host={$this->host}, port={$this->port}, dbname={$this->db_name}, user={$this->username}");
-                
+
                 // Provide more detailed error message when debug is enabled
                 $isDebug = ($_ENV['APP_DEBUG'] ?? 'false') === 'true';
-                
+
                 if ($isDebug) {
                     $detailedError = "Database connection failed: {$errorMessage}";
                     $detailedError .= " (Host: {$this->host}, Port: {$this->port}, Database: {$this->db_name}, User: {$this->username})";
@@ -75,19 +89,22 @@ class Database {
                 }
             }
         }
-        
+
         return $this->pdo;
     }
-    
-    public function beginTransaction() {
+
+    public function beginTransaction()
+    {
         return $this->getConnection()->beginTransaction();
     }
-    
-    public function commit() {
+
+    public function commit()
+    {
         return $this->getConnection()->commit();
     }
-    
-    public function rollback() {
+
+    public function rollback()
+    {
         return $this->getConnection()->rollback();
     }
 }

@@ -65,6 +65,52 @@ class ProductController extends BaseController {
             ]
         ]);
     }
+
+    /**
+     * Public product listing for Shop (no authentication)
+     */
+    public function listPublic() {
+        $page = intval($_GET['page'] ?? 1);
+        $limit = intval($_GET['limit'] ?? 20);
+        $search = $_GET['search'] ?? '';
+        $categoryId = $_GET['category_id'] ?? null;
+        $offset = ($page - 1) * $limit;
+
+        // Only active products for public
+        $conditions = ['is_active' => 1];
+        if ($categoryId) { $conditions['category_id'] = $categoryId; }
+
+        if ($search) {
+            $products = $this->productModel->search($search, $categoryId, $limit, 1);
+        } else {
+            $products = $this->productModel->findAllWithCategory($conditions, 'name ASC', $limit, $offset);
+        }
+
+        $total = $this->productModel->count($conditions);
+
+        // Minimal safe fields for shop
+        $safe = array_map(function($p){
+            return [
+                'id' => $p['id'],
+                'name' => $p['name'],
+                'price' => (float)($p['price'] ?? 0),
+                'image' => $p['image'] ?? null,
+                'image_url' => $p['image_url'] ?? null,
+                'category_id' => $p['category_id'] ?? null,
+                'created_at' => $p['created_at'] ?? null
+            ];
+        }, $products);
+
+        $this->sendSuccess([
+            'products' => $safe,
+            'pagination' => [
+                'page' => $page,
+                'limit' => $limit,
+                'total' => $total,
+                'pages' => ceil($total / $limit)
+            ]
+        ]);
+    }
     
     /**
      * Get single product
